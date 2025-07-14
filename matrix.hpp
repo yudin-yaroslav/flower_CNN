@@ -1,3 +1,4 @@
+#include <iostream>
 #pragma once
 
 #include <array>
@@ -54,14 +55,55 @@ template <size_t dim, typename T> class Matrix {
 		size_t flat_index = 0;
 
 		for (size_t i = 0; i < sizeof...(Idx); ++i) {
-			if (indices[i] >= sizes_[i])
-				throw out_of_range("Index is too big");
 			flat_index += strides_[i] * indices[i];
 		}
 		return data_[flat_index];
 	}
-
 	template <typename... Idx> const T &operator()(Idx... idx) const { return const_cast<Matrix *>(this)->operator()(idx...); }
+
+	T &operator[](size_t flat_index) { return data_[flat_index]; }
+
+	const T &operator[](size_t flat_index) const { return data_[flat_index]; }
+
+	Matrix slice(const array<size_t, dim * 2> &ranges) const {
+		array<size_t, dim> new_sizes;
+		for (size_t i = 0; i < dim; ++i) {
+			if (ranges[2 * i] > ranges[2 * i + 1] || ranges[2 * i + 1] > sizes_[i])
+				throw std::out_of_range("Invalid slice range");
+			new_sizes[i] = ranges[2 * i + 1] - ranges[2 * i];
+		}
+
+		Matrix<dim, T> result(new_sizes);
+
+		for (size_t flat_idx = 0; flat_idx < data_.size(); flat_idx++) {
+			array<size_t, dim> multi_idx;
+
+			size_t remainder = flat_idx;
+			for (size_t d = 0; d < dim; ++d) {
+				multi_idx[d] = remainder / strides_[d];
+				remainder %= strides_[d];
+			}
+
+			bool inside = true;
+			array<size_t, dim> out_idx;
+			for (size_t d = 0; d < dim; ++d) {
+				if (multi_idx[d] < ranges[2 * d] || multi_idx[d] >= ranges[2 * d + 1]) {
+					inside = false;
+					break;
+				}
+				out_idx[d] = multi_idx[d] - ranges[2 * d];
+			}
+
+			if (inside) {
+				size_t flat_out_idx = 0;
+				for (size_t d = 0; d < dim; ++d) {
+					flat_out_idx += result.strides_[d] * out_idx[d];
+				}
+				result[flat_out_idx] = data_[flat_idx];
+			}
+		}
+		return result;
+	}
 
 	Matrix operator+(Matrix const &other) const {
 		if (sizes_ != other.sizes_) {
@@ -85,31 +127,24 @@ template <size_t dim, typename T> class Matrix {
 		return result;
 	}
 
-	// TODO: Generalize to n by m dimensional multiplication
-	Matrix operator*(Matrix const &other) const {
-		if (dim > 2) {
-			throw invalid_argument("Matrix multiplication for dim > 2 is forbidden");
-		}
-		if (sizes_[1] != other.sizes_[0]) {
-			throw invalid_argument("Inner matrix dimensions must agree for multiplication");
+	// Elementwise dot product
+	T operator*(Matrix const &other) const {
+		if (sizes_ != other.sizes_) {
+			throw std::invalid_argument("Matrices must have the same size for elementwise dot product");
 		}
 
-		Matrix result({sizes_[0], other.sizes_[1]});
-
+		T sum = T{};
 		for (size_t i = 0; i < sizes_[0]; i++) {
-			for (size_t j = 0; j < other.sizes_[1]; j++) {
-				T sum = T{};
-				for (size_t k = 0; k < sizes_[1]; k++) {
-					sum += (*this)(i, k) * other(k, j);
-				}
-				result(i, j) = sum;
+			for (size_t j = 0; j < sizes_[1]; j++) {
+				sum += (*this)(i, j) * other(i, j);
 			}
 		}
-
-		return result;
+		return sum;
 	}
 
-	const array<size_t, dim> &sizes() const { return sizes_; }
+	const array<size_t, dim> &get_sizes() const { return sizes_; }
+
+	// TODO: Print matrix
 
   private:
 	array<size_t, dim> sizes_;
