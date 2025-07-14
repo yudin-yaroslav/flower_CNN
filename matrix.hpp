@@ -109,6 +109,8 @@ template <size_t dim, typename T> class Matrix {
 		return result;
 	}
 
+	const array<size_t, dim> &sizes() const { return sizes_; }
+
   private:
 	array<size_t, dim> sizes_;
 	array<size_t, dim> strides_;
