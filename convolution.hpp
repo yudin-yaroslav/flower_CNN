@@ -1,5 +1,4 @@
 #include "matrix.hpp"
-#include <iostream>
 using namespace std;
 
 template <typename T> Matrix<2, T> convolve2D(const Matrix<2, T> &input, const Matrix<2, T> &kernel) {
@@ -24,30 +23,4 @@ template <typename T> Matrix<2, T> convolve2D(const Matrix<2, T> &input, const M
 	}
 
 	return result;
-}
-
-int main() {
-	Matrix<2, int> input({3, 3});
-	int input_data[9] = {1, 6, 2, 5, 3, 1, 7, 0, 4};
-
-	for (size_t i = 0; i < 3; i++) {
-		for (size_t j = 0; j < 3; j++) {
-			input(i, j) = input_data[3 * i + j];
-		}
-	}
-
-	Matrix<2, int> kernel({2, 2});
-	int kernel_data[4] = {1, 2, -1, 0};
-
-	for (size_t i = 0; i < 2; i++) {
-		for (size_t j = 0; j < 2; j++) {
-			kernel(i, j) = kernel_data[2 * i + j];
-		}
-	}
-
-	Matrix<2, int> result = convolve2D(input, kernel);
-
-	result.print();
-
-	return 0;
 }

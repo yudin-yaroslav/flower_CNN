@@ -1,10 +1,10 @@
-#include <iostream>
 #pragma once
 
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <initializer_list>
+#include <iostream>
 #include <stdexcept>
 #include <vector>
 
