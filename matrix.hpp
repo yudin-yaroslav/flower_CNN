@@ -50,6 +50,14 @@ template <size_t dim, typename T> class Matrix {
 		data_.assign(total, T{});
 	}
 
+	T operator()(const array<size_t, dim> &idx) const {
+		size_t flat_index = 0;
+		for (size_t i = 0; i < dim; ++i) {
+			flat_index += strides_[i] * idx[i];
+		}
+		return data_[flat_index];
+	}
+
 	template <typename... Idx> T &operator()(Idx... idx) {
 		size_t indices[] = {size_t(idx)...};
 		size_t flat_index = 0;
@@ -144,10 +152,32 @@ template <size_t dim, typename T> class Matrix {
 
 	const array<size_t, dim> &get_sizes() const { return sizes_; }
 
-	// TODO: Print matrix
+	void print() {
+		array<size_t, dim> indices{};
+		print_recursive(0, indices);
+		cout << endl;
+	}
 
   private:
 	array<size_t, dim> sizes_;
 	array<size_t, dim> strides_;
 	vector<T> data_;
+
+	void print_recursive(size_t dim_level, array<size_t, dim> &indices) const {
+		if (dim_level == dim - 1) {
+			cout << "[ ";
+			for (size_t i = 0; i < sizes_[dim_level]; ++i) {
+				indices[dim_level] = i;
+				cout << (*this)(indices) << " ";
+			}
+			cout << "]\n";
+		} else {
+			cout << "[\n";
+			for (size_t i = 0; i < sizes_[dim_level]; ++i) {
+				indices[dim_level] = i;
+				print_recursive(dim_level + 1, indices);
+			}
+			cout << "]\n";
+		}
+	}
 };

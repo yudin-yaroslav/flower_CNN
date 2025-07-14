@@ -47,11 +47,7 @@ int main() {
 
 	Matrix<2, int> result = convolve2D(input, kernel);
 
-	for (size_t i = 0; i < 2; i++) {
-		for (size_t j = 0; j < 2; j++) {
-			cout << result(i, j) << " ";
-		}
-	}
+	result.print();
 
 	return 0;
 }
