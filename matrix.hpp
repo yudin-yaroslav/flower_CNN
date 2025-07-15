@@ -118,7 +118,7 @@ template <size_t dim, typename T> class Matrix {
 			ranges[2 * i + 1] = indices[i] + 1;
 		}
 
-		return (*this).slice(ranges);
+		return this->slice(ranges);
 	}
 
 	T &operator[](size_t flat_index) { return data_[flat_index]; }
@@ -190,7 +190,7 @@ template <size_t dim, typename T> class Matrix {
 
 	const array<size_t, dim> &get_sizes() const { return sizes_; }
 	const array<size_t, dim> &get_strides() const { return strides_; }
-	const array<size_t, dim> &get_data() const { return data_; }
+	const vector<T> &get_data() const { return data_; }
 
 	void print() {
 		array<size_t, dim> indices{};

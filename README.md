@@ -1,9 +1,9 @@
 # TODO
 
 - [x] **Design a linear algebra framework**
-- [ ] **Implement convolution function**
+- [x] **Implement convolution function**
 - [ ] **Create a convolutional layer**
-    - [ ] Class structure
+    - [x] Class structure
     - [ ] Forward propagation
     - [ ] Back propagation
 - [ ] **Create a pooling layer**
@@ -12,5 +12,9 @@
     - [ ] Back propagation
 - [ ] **Create a fully connected layer**
     - [ ] Class structure
+    - [ ] Forward propagation
+    - [ ] Back propagation
+- [ ] **Create a CNN**
+    - [x] Class structure
     - [ ] Forward propagation
     - [ ] Back propagation
