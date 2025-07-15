@@ -4,7 +4,7 @@
 - [x] **Implement convolution function**
 - [ ] **Create a convolutional layer**
     - [x] Class structure
-    - [ ] Forward propagation
+    - [x] Forward propagation
     - [ ] Back propagation
 - [ ] **Create a pooling layer**
     - [ ] Class structure
