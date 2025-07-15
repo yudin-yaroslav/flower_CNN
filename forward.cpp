@@ -29,14 +29,15 @@ template <typename T> Matrix<2, T> maxPooling2D(const Matrix<2, T> &input, size_
 	return output;
 }
 
-Matrix<1, float> forward(const Matrix<2, float> &input, const Matrix<2, float> &kernel, const Matrix<2, float> bias, const Matrix<2, float> &fc_weights) {
+Matrix<1, float> forward(const Matrix<2, float> &input, const Matrix<2, float> &kernel, const Matrix<2, float> bias,
+						 const Matrix<2, float> &fc_weights) {
 	Matrix<2, float> conv_out = bias + convolve2D(input, kernel);
 	for (size_t i = 0; i < conv_out.get_sizes()[0]; ++i) {
 		for (size_t j = 0; j < conv_out.get_sizes()[1]; ++j) {
 			conv_out(i, j) = max(0.0f, conv_out(i, j)); // ReLU
 		}
 	}
-	Matrix<2, float> pooled = maxPooling2D(conv_out, 2, 2);// pooling
+	Matrix<2, float> pooled = maxPooling2D(conv_out, 2, 2); // pooling
 	// to flat
 	size_t H = pooled.get_sizes()[0], W = pooled.get_sizes()[1];
 	Matrix<1, float> flat({H * W});
@@ -45,8 +46,8 @@ Matrix<1, float> forward(const Matrix<2, float> &input, const Matrix<2, float> &
 			flat(i * W + j) = pooled(i, j);
 		}
 	}
-    // попытка сделать fulyy connected (или это не он)
-	size_t out_size = fc_weights.get_sizes()[0]; 
+	// попытка сделать fulyy connected (или это не он)
+	size_t out_size = fc_weights.get_sizes()[0];
 	size_t in_size = fc_weights.get_sizes()[1];
 
 	Matrix<1, float> output({out_size});
@@ -59,5 +60,4 @@ Matrix<1, float> forward(const Matrix<2, float> &input, const Matrix<2, float> &
 	}
 
 	return output;
-
 }

@@ -1,9 +1,7 @@
 #pragma once
 
 #include <array>
-#include <cassert>
 #include <cstddef>
-#include <initializer_list>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
@@ -12,10 +10,10 @@ using namespace std;
 
 template <size_t dim, typename T> class Matrix {
   public:
+	// Constructors
 	Matrix() = default;
 
-	// TODO: Unite two constructors
-	Matrix(const std::array<size_t, dim> &sizes) {
+	Matrix(const array<size_t, dim> &sizes) {
 		sizes_ = sizes;
 		strides_[dim - 1] = 1;
 
@@ -31,53 +29,38 @@ template <size_t dim, typename T> class Matrix {
 		data_.assign(total, T{});
 	}
 
-	Matrix(initializer_list<size_t> sizes) {
-		if (sizes.size() != dim) {
-			throw invalid_argument("Wrong matrix dimension");
-		}
-
-		copy(sizes.begin(), sizes.end(), sizes_.begin());
-		strides_[dim - 1] = 1;
-
-		for (int i = dim - 2; i >= 0; i--) {
-			strides_[i] = strides_[i + 1] * sizes_[i + 1];
-		}
-
-		size_t total = 1;
-		for (auto s : sizes_) {
-			total *= s;
-		}
-		data_.assign(total, T{});
+	template <typename... SizeTs> Matrix(SizeTs... sizes) {
+		array<size_t, dim> arr_sizes = {static_cast<size_t>(sizes)...};
+		*this = Matrix(arr_sizes);
 	}
 
-	T operator()(const array<size_t, dim> &idx) const {
+	// Indexing utils
+	array<size_t, dim> index_flat2multi(size_t flat_index) const {
+		array<size_t, dim> multi_index;
+
+		size_t remainder = flat_index;
+		for (size_t d = 0; d < dim; ++d) {
+			multi_index[d] = remainder / strides_[d];
+			remainder %= strides_[d];
+		}
+
+		return multi_index;
+	}
+
+	size_t index_multi2flat(const array<size_t, dim> &multi_index) const {
 		size_t flat_index = 0;
 		for (size_t i = 0; i < dim; ++i) {
-			flat_index += strides_[i] * idx[i];
+			flat_index += strides_[i] * multi_index[i];
 		}
-		return data_[flat_index];
+		return flat_index;
 	}
 
-	template <typename... Idx> T &operator()(Idx... idx) {
-		size_t indices[] = {size_t(idx)...};
-		size_t flat_index = 0;
-
-		for (size_t i = 0; i < sizeof...(Idx); ++i) {
-			flat_index += strides_[i] * indices[i];
-		}
-		return data_[flat_index];
-	}
-	template <typename... Idx> const T &operator()(Idx... idx) const { return const_cast<Matrix *>(this)->operator()(idx...); }
-
-	T &operator[](size_t flat_index) { return data_[flat_index]; }
-
-	const T &operator[](size_t flat_index) const { return data_[flat_index]; }
-
+	// Slicing
 	Matrix slice(const array<size_t, dim * 2> &ranges) const {
 		array<size_t, dim> new_sizes;
 		for (size_t i = 0; i < dim; ++i) {
 			if (ranges[2 * i] > ranges[2 * i + 1] || ranges[2 * i + 1] > sizes_[i])
-				throw std::out_of_range("Invalid slice range");
+				throw out_of_range("Invalid slice range");
 			new_sizes[i] = ranges[2 * i + 1] - ranges[2 * i];
 		}
 
@@ -113,6 +96,34 @@ template <size_t dim, typename T> class Matrix {
 		return result;
 	}
 
+	// Indexing operators
+	T &operator()(const array<size_t, dim> &multi_index) { return data_[index_multi2flat(multi_index)]; }
+
+	template <typename... Idx, typename = enable_if_t<(sizeof...(Idx) == dim)>> T &operator()(Idx... idx) {
+		array<size_t, dim> arr_idx = {static_cast<size_t>(idx)...};
+		return (*this)(arr_idx);
+	}
+
+	template <typename... Idx, typename = enable_if_t<(sizeof...(Idx) < dim)>, typename = void> Matrix operator()(Idx... idx) {
+		array<size_t, 2 * dim> ranges;
+
+		for (size_t k = 0; k < dim; ++k) {
+			ranges[2 * k] = 0;
+			ranges[2 * k + 1] = sizes_[k];
+		}
+
+		size_t indices[] = {static_cast<size_t>(idx)...};
+		for (size_t i = 0; i < sizeof...(Idx); ++i) {
+			ranges[2 * i] = indices[i];
+			ranges[2 * i + 1] = indices[i] + 1;
+		}
+
+		return (*this).slice(ranges);
+	}
+
+	T &operator[](size_t flat_index) { return data_[flat_index]; }
+
+	// Other operators
 	Matrix operator+(Matrix const &other) const {
 		if (sizes_ != other.sizes_) {
 			throw invalid_argument("Matrix sizes don't coincide");
@@ -135,10 +146,9 @@ template <size_t dim, typename T> class Matrix {
 		return result;
 	}
 
-	// Elementwise dot product
 	T operator*(Matrix const &other) const {
 		if (sizes_ != other.sizes_) {
-			throw std::invalid_argument("Matrices must have the same size for elementwise dot product");
+			throw invalid_argument("Matrix sizes don't coincide");
 		}
 
 		T sum = T{};
@@ -150,7 +160,37 @@ template <size_t dim, typename T> class Matrix {
 		return sum;
 	}
 
+	// Convolution
+	static Matrix<2, T> convolute(const Matrix<2, T> &input, const Matrix<2, T> &kernel, size_t stride = 1) {
+		size_t input_width = input.get_sizes()[0];
+		size_t input_height = input.get_sizes()[1];
+
+		size_t kernel_width = kernel.get_sizes()[0];
+		size_t kernel_height = kernel.get_sizes()[1];
+
+		size_t output_width = (input_width - kernel_width) / stride + 1;
+		size_t output_height = (input_height - kernel_height) / stride + 1;
+
+		Matrix<2, T> result({output_width, output_height});
+		Matrix<2, T> sub_input;
+
+		for (size_t x = 0; x < output_width; x++) {
+			for (size_t y = 0; y < output_height; y++) {
+				size_t str_x = x * stride;
+				size_t str_y = y * stride;
+
+				sub_input = input.slice({str_x, str_x + kernel_width, str_y, str_y + kernel_height});
+
+				result(x, y) = sub_input * kernel;
+			}
+		}
+
+		return result;
+	}
+
 	const array<size_t, dim> &get_sizes() const { return sizes_; }
+	const array<size_t, dim> &get_strides() const { return strides_; }
+	const array<size_t, dim> &get_data() const { return data_; }
 
 	void print() {
 		array<size_t, dim> indices{};
@@ -168,7 +208,7 @@ template <size_t dim, typename T> class Matrix {
 			cout << "[ ";
 			for (size_t i = 0; i < sizes_[dim_level]; ++i) {
 				indices[dim_level] = i;
-				cout << (*this)(indices) << " ";
+				cout << data_[index_multi2flat(indices)] << " ";
 			}
 			cout << "]\n";
 		} else {
