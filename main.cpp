@@ -110,6 +110,30 @@ void test_relu_layer() {
 	net.buffers.back()->print();
 }
 
+void test_softmax_layer() {
+	cout << "\n=== Test: SoftMax Layer ===\n";
+
+	Matrix<3, float> *input_data = new Matrix<3, float>(1, 2, 3);
+	(*input_data)(0, 0, 0) = -2;
+	(*input_data)(0, 0, 1) = 0;
+	(*input_data)(0, 0, 2) = 5;
+	(*input_data)(0, 1, 0) = -1;
+	(*input_data)(0, 1, 1) = 3;
+	(*input_data)(0, 1, 2) = -4;
+
+	CNN net(input_data);
+	net.add_softmax_layer();
+
+	auto relu_layer_ptr = dynamic_cast<SoftMaxLayer *>(net.layers[0]);
+	relu_layer_ptr->forward();
+
+	cout << "Input:\n";
+	input_data->print();
+
+	cout << "Output after SoftMax:\n";
+	net.buffers.back()->print();
+}
+
 void test_reshape_layer() {
 	cout << "\n=== Test: Reshape Layer ===\n";
 
@@ -150,40 +174,40 @@ void test_cnn_forward() {
 
 	net.add_convolutional_layer({12, 12}, 96, 4);
 	net.add_relu_layer();
+	net.add_softmax_layer();
 
 	net.add_pooling_layer({3, 3}, 2);
 
 	net.add_convolutional_layer({5, 5}, 256, 1);
 	net.add_relu_layer();
-
+	net.add_softmax_layer();
 	net.add_convolutional_layer({3, 3}, 256, 1);
 	net.add_relu_layer();
-	net.add_convolutional_layer({3, 3}, 256, 1);
-	net.add_relu_layer();
+	net.add_softmax_layer();
 	net.add_convolutional_layer({3, 3}, 96, 1);
 	net.add_relu_layer();
+	net.add_softmax_layer();
 
 	net.add_pooling_layer({3, 3}, 2);
 
 	net.add_reshape_layer();
 	net.add_fully_connected_layer(512);
-	net.add_fully_connected_layer(512);
+	net.add_fully_connected_layer(216);
 	net.add_fully_connected_layer(102);
-	net.add_relu_layer();
+	net.add_softmax_layer();
 
 	cout << "Starting forward propagation..." << endl;
 	net.forward();
-
-	// Print final output shape and some values
-	auto final_output = net.buffers.back();
-	cout << "Final output shape: (" << final_output->get_sizes()[0] << ", " << final_output->get_sizes()[1] << ", "
-		 << final_output->get_sizes()[2] << ")\n";
-
-	cout << "Final output (first 10 elements): ";
-	for (size_t i = 0; i < 10 && i < final_output->data().size(); i++) {
-		cout << final_output->data()[i] << " ";
-	}
-	cout << "\n";
+	//
+	// auto final_output = net.buffers[14];
+	// cout << "Final output shape: (" << final_output->get_sizes()[0] << ", " << final_output->get_sizes()[1] << ", "
+	// 	 << final_output->get_sizes()[2] << ")\n";
+	//
+	// cout << "Final output (first 10 elements): ";
+	// for (size_t i = 0; i < 10 && i < final_output->data().size(); i++) {
+	// 	cout << final_output->data()[i] << " ";
+	// }
+	// cout << "\n";
 }
 
 int main() {
@@ -191,6 +215,7 @@ int main() {
 	// test_max_pooling_layer();
 	// test_fully_connected_layer();
 	// test_relu_layer();
+	// test_softmax_layer();
 	// test_reshape_layer();
 
 	test_cnn_forward();

@@ -242,7 +242,6 @@ template <size_t dim, typename T> class Matrix {
 
 		for (size_t x = 0; x < output_width; x++) {
 			for (size_t y = 0; y < output_height; y++) {
-				cout << "Conv layer, pixel: " << x << ", " << y << endl;
 				size_t str_x = x * stride;
 				size_t str_y = y * stride;
 
