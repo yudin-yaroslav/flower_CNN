@@ -35,6 +35,10 @@ template <size_t dim, typename T> class Matrix {
 
 	// Indexing utils
 	array<size_t, dim> index_flat2multi(size_t flat_index) const {
+		if (flat_index >= data_.size()) {
+			throw out_of_range("Index out of range");
+		}
+
 		array<size_t, dim> multi_index;
 
 		size_t remainder = flat_index;
@@ -51,6 +55,11 @@ template <size_t dim, typename T> class Matrix {
 		for (size_t i = 0; i < dim; ++i) {
 			flat_index += strides_[i] * multi_index[i];
 		}
+
+		if (flat_index >= data_.size()) {
+			throw out_of_range("Index out of range");
+		}
+
 		return flat_index;
 	}
 
@@ -64,6 +73,11 @@ template <size_t dim, typename T> class Matrix {
 		for (size_t i = 0; i < dim; ++i) {
 			flat_index += strides_[i] * full_index[i];
 		}
+
+		if (flat_index >= data_.size()) {
+			throw out_of_range("Index out of range");
+		}
+
 		return flat_index;
 	}
 
@@ -152,7 +166,12 @@ template <size_t dim, typename T> class Matrix {
 		return new_matrix;
 	}
 
-	T &operator[](size_t flat_index) { return data_[flat_index]; }
+	T &operator[](size_t flat_index) {
+		if (flat_index >= data_.size()) {
+			throw out_of_range("Index out of range");
+		}
+		return data_[flat_index];
+	}
 
 	// Other operators
 	Matrix operator+(Matrix const &other) const {
@@ -191,8 +210,24 @@ template <size_t dim, typename T> class Matrix {
 		return sum;
 	}
 
+	Matrix<2, T> mat_multiply(const Matrix<2, T> &other) const {
+		Matrix result(sizes_[0], other.sizes_[1]);
+
+		for (size_t i = 0; i < sizes_[0]; i++) {
+			for (size_t j = 0; j < other.sizes_[1]; j++) {
+				T sum = T{};
+				for (size_t k = 0; k < sizes_[1]; k++) {
+					sum += (*this)(i, k) * other(k, j);
+				}
+				result(i, j) = sum;
+			}
+		}
+
+		return result;
+	}
+
 	// Convolution
-	Matrix<2, T> convolute(const Matrix<2, T> &kernel, size_t stride = 1) {
+	Matrix<2, T> cross_correlate(const Matrix<2, T> &kernel, size_t stride = 1) {
 		size_t input_width = this->get_sizes()[0];
 		size_t input_height = this->get_sizes()[1];
 
@@ -207,6 +242,7 @@ template <size_t dim, typename T> class Matrix {
 
 		for (size_t x = 0; x < output_width; x++) {
 			for (size_t y = 0; y < output_height; y++) {
+				cout << "Conv layer, pixel: " << x << ", " << y << endl;
 				size_t str_x = x * stride;
 				size_t str_y = y * stride;
 
