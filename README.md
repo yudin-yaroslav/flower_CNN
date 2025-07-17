@@ -6,15 +6,15 @@
     - [x] Class structure
     - [x] Forward propagation
     - [ ] Back propagation
-- [ ] **Create a pooling layer**
-    - [ ] Class structure
-    - [ ] Forward propagation
-    - [ ] Back propagation
-- [ ] **Create a fully connected layer**
-    - [ ] Class structure
-    - [ ] Forward propagation
-    - [ ] Back propagation
-- [ ] **Create a CNN**
+- [x] **Create a pooling layer**
     - [x] Class structure
-    - [ ] Forward propagation
+    - [x] Forward propagation
+    - [ ] Back propagation
+- [x] **Create a fully connected layer**
+    - [x] Class structure
+    - [x] Forward propagation
+    - [ ] Back propagation
+- [x] **Create a CNN**
+    - [x] Class structure
+    - [x] Forward propagation
     - [ ] Back propagation
