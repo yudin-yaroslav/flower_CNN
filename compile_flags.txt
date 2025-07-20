@@ -1,5 +1,10 @@
 -std=c++17
 -I/usr/include
 -I/usr/include/eigen3
+
 -fopenmp
--O3 -march=native -ffast-math -funroll-loops
+-O3
+-march=native
+-ffast-math
+
+-I/usr/include/opencv4

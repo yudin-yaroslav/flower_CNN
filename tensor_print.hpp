@@ -1,4 +1,4 @@
-
+// kudos to stackoverflow for this file since I hate writing debug methods lol
 #include <iostream>
 #include <unsupported/Eigen/CXX11/Tensor>
 
