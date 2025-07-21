@@ -540,7 +540,7 @@ pair<string, bool> test_cnn_forward() {
 
 	CNN net(input, 0.1);
 
-	net.add_convolutional_layer({12, 12}, 96, 4);
+	net.add_convolutional_layer({12, 12}, 96, 1);
 	net.add_relu_layer();
 
 	net.add_maxpooling_layer({3, 3}, 2);
@@ -614,9 +614,10 @@ pair<string, bool> test_loss_to_softmax_gradient() {
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
 	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 4);
-	for (int i = 0; i < 4; ++i) {
-		(*input)(0, 0, i) = i + 1;
-	}
+	(*input)(0, 0, 0) = 0;
+	(*input)(0, 0, 1) = -2;
+	(*input)(0, 0, 2) = 3;
+	(*input)(0, 0, 3) = 2;
 
 	cout << "Input:\n";
 	PrintTensorNumpy(*input, 1, 1, 4);
@@ -636,14 +637,12 @@ pair<string, bool> test_loss_to_softmax_gradient() {
 	net.backward(2);
 
 	Tensor<float, 3> gradient_correct(1, 1, 4);
-	gradient_correct(0, 0, 0) = 0.0160293;
-	gradient_correct(0, 0, 1) = 0.04357215;
-	gradient_correct(0, 0, 2) = -0.3815585;
-	gradient_correct(0, 0, 3) = 0.321957;
+	gradient_correct(0, 0, 0) = 0.0174765;
+	gradient_correct(0, 0, 1) = 0.00236518;
+	gradient_correct(0, 0, 2) = -0.148976;
+	gradient_correct(0, 0, 3) = 0.129134;
 	Tensor<float, 3> gradient_computed = *net.gradient_buffer[1];
 
-	cout << "\nCorrect gradient:\n";
-	PrintTensorNumpy(gradient_correct, 1, 1, 4);
 	cout << "\nComputed gradient:\n";
 	PrintTensorNumpy(gradient_computed, 1, 1, 4);
 	cout << endl;
@@ -663,7 +662,7 @@ pair<string, bool> test_softmax_gradient() {
 
 	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 4);
 	for (int i = 0; i < 4; ++i) {
-		(*input)(0, 0, i) = i + 1;
+		(*input)(0, 0, i) = i - 2;
 	}
 
 	cout << "Input:\n";
@@ -948,13 +947,13 @@ pair<string, bool> test_fully_connected_training() {
 
 	net.backward(2);
 
-	Tensor input_gradient = *full_layer_ptr->input_gradient;
-	Tensor output_gradient = *full_layer_ptr->output_gradient;
+	Tensor input_gradient = *full_layer_ptr->input_gradients;
+	Tensor output_gradient = *full_layer_ptr->output_gradients;
 
 	cout << "\nOutput gradient (softmax):\n";
-	PrintTensorNumpy(*softmax_layer_ptr->output_gradient, 1, 1, 3);
+	PrintTensorNumpy(*softmax_layer_ptr->output_gradients, 1, 1, 3);
 	cout << "\nInput gradient (softmax):\n";
-	PrintTensorNumpy(*softmax_layer_ptr->input_gradient, 1, 1, 3);
+	PrintTensorNumpy(*softmax_layer_ptr->input_gradients, 1, 1, 3);
 
 	cout << "\nOutput gradient (fully-connected):\n";
 	PrintTensorNumpy(output_gradient, 1, 1, 3);
@@ -974,9 +973,9 @@ pair<string, bool> test_fully_connected_training() {
 	bias_gradient_correct << 0.174557, 0, -0.174557;
 
 	cout << "\nWeights gradient:\n";
-	PrintMatrixNumpy(full_layer_ptr->weights_gradients, 3, 4);
+	PrintMatrixNumpy(full_layer_ptr->weight_gradients, 3, 4);
 	cout << "\nBiases gradient:\n";
-	PrintMatrixNumpy(full_layer_ptr->biases_gradients, 3, 1);
+	PrintMatrixNumpy(full_layer_ptr->bias_gradients, 3, 1);
 
 	cout << endl;
 	for (Index i = 0; i < 4; i++) {
@@ -986,13 +985,13 @@ pair<string, bool> test_fully_connected_training() {
 	}
 	for (Index i = 0; i < 3; i++) {
 		for (Index j = 0; j < 4; j++) {
-			if (abs(weight_gradient_correct(i, j) - full_layer_ptr->weights_gradients(i, j)) > 1e-4) {
+			if (abs(weight_gradient_correct(i, j) - full_layer_ptr->weight_gradients(i, j)) > 1e-4) {
 				return {name, false};
 			}
 		}
 	}
 	for (Index i = 0; i < 3; i++) {
-		if (abs(bias_gradient_correct(i) - full_layer_ptr->biases_gradients(i)) > 1e-4) {
+		if (abs(bias_gradient_correct(i) - full_layer_ptr->bias_gradients(i)) > 1e-4) {
 			return {name, false};
 		}
 	}
@@ -1011,30 +1010,229 @@ pair<string, bool> test_fully_connected_training() {
 	return {name, true};
 }
 
+pair<string, bool> test_conv_gradient() {
+	const string name = "Convolutional Backward Value";
+	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
+
+	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+	for (Index c = 0; c < 2; ++c) {
+		for (Index i = 0; i < 2; ++i) {
+			for (Index j = 0; j < 2; ++j) {
+				(*input)(c, i, j) = c * 4 + i * 2 + j;
+			}
+		}
+	}
+
+	cout << "Input:\n";
+	PrintTensorNumpy(*input, 2, 2, 2);
+
+	float learning_rate = 0.1;
+	CNN net(input, learning_rate);
+	net.add_convolutional_layer({2, 2}, 2, 1);
+
+	ConvolutionalLayer *conv_layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0]);
+
+	conv_layer_ptr->kernel << 0.0f, 0.1f, 0.0f, 0.1f, 0.0f, 0.3f, 0.2f, 0.3f, 0.1f, 0.1f, 0.4f, 0.2f, 0.1f, 0.3f, 0.4f, 0.1f;
+	conv_layer_ptr->biases << 0.3, 0.2;
+
+	cout << "\033[1;34m===== Before Training =====\033[0m\n";
+
+	net.forward();
+	(*net.gradient_buffer[1])(0, 0, 0) = 0.2f;
+	(*net.gradient_buffer[1])(1, 0, 0) = -0.2f;
+
+	// cout << "\nPredictions:\n";
+	// for (int i = 0; i < 8; i++) {
+	// 	cout << net.predictions[i] << endl;
+	// }
+
+	cout << "\nKernel:\n";
+	PrintMatrixNumpy(conv_layer_ptr->kernel, 2, 8);
+	cout << "\nBiases:\n";
+	PrintMatrixNumpy(conv_layer_ptr->biases, 2, 2);
+	cout << "\nOutput:\n";
+	PrintTensorNumpy(*conv_layer_ptr->output_data, 2, 1, 1);
+
+	cout << "\033[1;34m===== During Training =====\033[0m\n";
+	net.backward(3);
+
+	Tensor input_gradient = *conv_layer_ptr->input_gradients;
+	Tensor output_gradient = *conv_layer_ptr->output_gradients;
+	Matrix kernel_gradient = conv_layer_ptr->kernel_gradients;
+	Matrix bias_gradient = conv_layer_ptr->bias_gradients;
+
+	// cout << "\nOutput gradient (softmax):\n";
+	// PrintTensorNumpy(*softmax_layer_ptr->output_gradient, 1, 1, 8);
+	// cout << "\nInput gradient (softmax):\n";
+	// PrintTensorNumpy(*softmax_layer_ptr->input_gradient, 1, 1, 8);
+
+	cout << "\nOutput gradient:\n";
+	PrintTensorNumpy(output_gradient, 2, 1, 1);
+	cout << "\nInput gradient:\n";
+	PrintTensorNumpy(input_gradient, 2, 2, 2);
+	cout << "\nKernel gradient:\n";
+	PrintMatrixNumpy(kernel_gradient, 2, 8);
+	cout << "\nBias gradient:\n";
+	PrintMatrixNumpy(bias_gradient, 2, 2);
+
+	Tensor<float, 3> input_gradient_correct(2, 2, 2);
+	array<float, 8> temp_values = {-0.02f, 0.0f, -0.08, -0.02, -0.02, 0.0, -0.04, 0.04};
+	for (Index i = 0; i < 2; ++i) {
+		for (Index j = 0; j < 2; ++j) {
+			for (Index k = 0; k < 2; ++k) {
+				input_gradient_correct(i, j, k) = temp_values[i * 4 + j * 2 + k];
+			}
+		}
+	}
+
+	// Tensor<float, 3> kernel_gradient_correct(2, 2, 2);
+	// temp_values = {-0.02f, 0.0f, -0.08, -0.02, -0.02, 0.0, -0.04, 0.04};
+	// for (Index i = 0; i < 2; ++i) {
+	// 	for (Index j = 0; j < 2; ++j) {
+	// 		for (Index k = 0; k < 2; ++k) {
+	// 			kernel_gradient_correct(i, j, k) = temp_values[i * 4 + j * 2 + k];
+	// 		}
+	// 	}
+	// }
+
+	for (Index i = 0; i < 2; i++) {
+		for (Index j = 0; j < 2; j++) {
+			for (Index k = 0; k < 2; k++) {
+				if (abs(input_gradient_correct(i, j, k) - input_gradient(i, j, k)) > 1e-4) {
+					return {name, false};
+				}
+			}
+		}
+	}
+	// for (Index i = 0; i < 2; i++) {
+	// 	for (Index j = 0; j < 2; j++) {
+	// 		for (Index k = 0; k < 2; k++) {
+	// 			if (abs(kernel_gradient_correct(i, j, k) - kernel_gradient(i, j * 2 + k)) > 1e-4) {
+	// 				return {name, false};
+	// 			}
+	// 		}
+	// 	}
+	// }
+
+	cout << "\033[1;34m===== After Training =====\033[0m\n";
+
+	net.forward();
+
+	cout << "\nKernel:\n";
+	PrintMatrixNumpy(conv_layer_ptr->kernel, 2, 8);
+	cout << "\nBiases:\n";
+	PrintMatrixNumpy(conv_layer_ptr->biases, 2, 2);
+	cout << "\nOutput:\n";
+	PrintTensorNumpy(*conv_layer_ptr->output_data, 2, 1, 1);
+
+	return {name, true};
+}
+
+pair<string, bool> test_conv_input_grad_simple() {
+	const string name = "Convolutional Backward Value";
+	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
+
+	Tensor<float, 3> *input = new Tensor<float, 3>(1, 2, 2);
+	for (Index i = 0; i < 2; ++i) {
+		for (Index j = 0; j < 2; ++j) {
+			(*input)(0, i, j) = i * 2 + j;
+		}
+	}
+
+	cout << "Input:\n";
+	PrintTensorNumpy(*input, 1, 2, 2);
+
+	float learning_rate = 10;
+	CNN net(input, learning_rate);
+	net.add_convolutional_layer({2, 2}, 1, 1);
+
+	ConvolutionalLayer *conv_layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0]);
+
+	conv_layer_ptr->kernel << 1, 3, 2, 1;
+	conv_layer_ptr->biases << 0.3;
+
+	cout << "\033[1;34m===== Before Training =====\033[0m\n";
+
+	net.forward();
+	(*net.gradient_buffer.back())(0, 0, 0) = 2.0f;
+
+	// cout << "\nPredictions:\n";
+	// for (int i = 0; i < 8; i++) {
+	// 	cout << net.predictions[i] << endl;
+	// }
+
+	cout << "\nKernel:\n";
+	PrintMatrixNumpy(conv_layer_ptr->kernel, 1, 4);
+	cout << "\nBiases:\n";
+	PrintMatrixNumpy(conv_layer_ptr->biases, 1, 1);
+	cout << "\nOutput:\n";
+	PrintTensorNumpy(*conv_layer_ptr->output_data, 1, 1, 1);
+
+	cout << "\033[1;34m===== During Training =====\033[0m\n";
+
+	net.backward(3);
+
+	Tensor input_gradient = *conv_layer_ptr->input_gradients;
+	Tensor output_gradient = *conv_layer_ptr->output_gradients;
+
+	// cout << "\nOutput gradient (softmax):\n";
+	// PrintTensorNumpy(*softmax_layer_ptr->output_gradient, 1, 1, 8);
+	// cout << "\nInput gradient (softmax):\n";
+	// PrintTensorNumpy(*softmax_layer_ptr->input_gradient, 1, 1, 8);
+
+	cout << "\nOutput gradient:\n";
+	PrintTensorNumpy(output_gradient, 1, 1, 1);
+	cout << "\nInput gradient:\n";
+	PrintTensorNumpy(input_gradient, 1, 2, 2);
+
+	Tensor<float, 3> input_gradient_correct(1, 2, 2);
+	array<float, 9> temp_values = {2, 6, 4, 2};
+	for (Index i = 0; i < 2; ++i) {
+		for (Index j = 0; j < 2; ++j) {
+			input_gradient_correct(0, i, j) = temp_values[i * 2 + j];
+		}
+	}
+
+	// cout << "\nCorrect input gradient:\n";
+	// PrintTensorNumpy(input_gradient_correct, 2, 3, 3);
+
+	for (Index i = 0; i < 2; i++) {
+		for (Index j = 0; j < 2; j++) {
+			if (abs(input_gradient_correct(0, i, j) - input_gradient(0, i, j)) > 1e-4) {
+				return {name, false};
+			}
+		}
+	}
+
+	return {name, true};
+}
+
 int main() {
-	// test_func(test_conv_forward_filters);
-	// test_func(test_conv_forward_channels);
+	test_func(test_conv_forward_filters);
+	test_func(test_conv_forward_channels);
 	// test_func(test_conv_forward_stride);
 	// test_func(test_conv_forward_speed);
-	//
-	// test_func(test_fully_connected_forward_value);
-	// test_func(test_fully_connected_forward_speed);
-	//
-	// test_func(test_maxpool_forward_value);
-	// test_func(test_maxpool_forward_speed);
-	//
-	// test_func(test_relu_forward_value);
-	// test_func(test_softmax_forward_value);
-	// test_func(test_reshape_forward_value);
+
+	test_func(test_fully_connected_forward_value);
+	test_func(test_fully_connected_forward_speed);
+
+	test_func(test_maxpool_forward_value);
+	test_func(test_maxpool_forward_speed);
+
+	test_func(test_relu_forward_value);
+	test_func(test_softmax_forward_value);
+	test_func(test_reshape_forward_value);
+
+	test_func(test_loss_to_softmax_gradient);
+	test_func(test_softmax_gradient);
+	test_func(test_reshape_gradient);
+	test_func(test_relu_gradient);
+	test_func(test_maxpool_gradient);
+	test_func(test_fully_connected_training);
+	test_func(test_conv_input_grad_simple);
+	test_func(test_conv_gradient);
 
 	// test_func(test_cnn_forward);
-
-	// test_func(test_loss_to_softmax_gradient);
-	// test_func(test_softmax_gradient);
-	// test_func(test_reshape_gradient);
-	// test_func(test_relu_gradient);
-	// test_func(test_maxpool_gradient);
-	test_func(test_fully_connected_training);
 
 	test_stat();
 

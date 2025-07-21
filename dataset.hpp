@@ -31,13 +31,14 @@ Tensor<float, 3> load_image(const std::string &path, int H, int W) {
 	return tensor;
 }
 
-vector<Sample> load_dataset(const string &root_dir, int H, int W) {
+vector<Sample> load_dataset(const string &root_dir, int H, int W, int number_of_samples) {
 	vector<Sample> dataset;
 	map<string, int> class_to_label;
 
 	int label_counter = 0;
 
 	for (const auto &entry : fs::directory_iterator(root_dir)) {
+
 		if (!entry.is_directory())
 			continue;
 
@@ -46,6 +47,9 @@ vector<Sample> load_dataset(const string &root_dir, int H, int W) {
 		class_to_label[class_name] = label;
 
 		for (const auto &img_entry : fs::directory_iterator(entry)) {
+			if (dataset.size() >= number_of_samples)
+				break;
+
 			if (!img_entry.is_regular_file())
 				continue;
 

@@ -1,58 +1,77 @@
 #include "layers.hpp"
+#include <algorithm>
+#include <numeric>
 
-vector<float> get_probabilities(Sample *sample, CNN *net) {
+float forward(Sample *sample, CNN *net) {
 	net->set_input_data(&(sample->image));
 	net->forward();
 
-	Tensor<float, 3> *prob_tensor = net->data_buffer.back();
+	return net->get_mean_squared_error(sample->label);
+}
 
-	vector<float> result(prob_tensor->size());
-	for (int i = 0; i < prob_tensor->size(); ++i)
-		result[i] = (*prob_tensor)(i);
+void test_CNN(vector<Sample> *testing_data, CNN *net) {
+	vector<float> errors;
+	vector<Sample> &data = *testing_data;
 
-	return result;
+	for (int i = 0; i < data.size(); i++) {
+		cout << "Testing image #" << i << endl;
+		errors.push_back(forward(&data[i], net));
+	}
+
+	// float min_error = *min_element(errors.begin(), errors.end());
+	// float max_error = *max_element(errors.begin(), errors.end());
+	// float average_error = accumulate(errors.begin(), errors.end(), 0.0f) / errors.size();
+	//
+	// cout << "Min error: " << min_error << endl;
+	// cout << "Max error: " << max_error << endl;
+	// cout << "Average error: " << average_error << endl;
 }
 
 int main() {
-	string dataset_path = "../dataset/train";
 	const int C = 3, H = 256, W = 256;
 
-	vector<Sample> training_data = load_dataset(dataset_path, H, W);
+	vector<Sample> training_data = load_dataset("../dataset/train", H, W, 100);
 	cout << "Loaded " << training_data.size() << " training samples.\n";
 
-	CNN net({C, H, W}, 0.1);
+	vector<Sample> testing_data = load_dataset("../dataset/test", H, W, 100);
+	cout << "Loaded " << testing_data.size() << " testing samples.\n";
 
-	net.add_convolutional_layer({12, 12}, 96, 4);
+	CNN net(&(training_data[0].image), 100);
+
+	net.add_convolutional_layer({3, 3}, 10, 1); // -> 254x254x32
 	net.add_relu_layer();
+	net.add_maxpooling_layer({2, 2}, 2); // -> 127x127x32
 
-	net.add_maxpooling_layer({3, 3}, 2);
+	// net.add_convolutional_layer({3, 3}, 64, 1); // -> 125x125x64
+	// net.add_relu_layer();
+	// net.add_maxpooling_layer({2, 2}, 2); // -> 62x62x64
 
-	net.add_convolutional_layer({5, 5}, 256, 1);
-	net.add_relu_layer();
-	net.add_convolutional_layer({3, 3}, 256, 1);
-	net.add_relu_layer();
-	net.add_convolutional_layer({3, 3}, 96, 1);
-	net.add_relu_layer();
+	// net.add_convolutional_layer({3, 3}, 128, 1); // -> 60x60x128
+	// net.add_relu_layer();
+	// net.add_maxpooling_layer({2, 2}, 2); // -> 30x30x128
+	//
+	// net.add_convolutional_layer({3, 3}, 256, 1); // -> 28x28x256
+	// net.add_relu_layer();
+	// net.add_maxpooling_layer({2, 2}, 2); // -> 14x14x256
 
-	net.add_maxpooling_layer({3, 3}, 2);
-
-	net.add_flatten_layer();
-	net.add_fully_connected_layer(512);
-	net.add_fully_connected_layer(216);
-	net.add_fully_connected_layer(102);
+	net.add_flatten_layer();			// -> 14*14*256 = 50176
+	net.add_fully_connected_layer(102); // ~25M params here!
+	net.add_fully_connected_layer(102); // final
 	net.add_softmax_layer();
 
-	vector<float> result;
-	for (int i = 0; i < 1000; i++) {
-		cout << "Image #" << i << endl;
-		result = get_probabilities(&training_data[i], &net);
-	}
+	cout << "Initialized CNN." << endl;
 
-	cout << "\n\033[1;34mResults bigger than 0.01: \033[0m\n";
+	cout << "\n\n\033[1;34mMSE: Test results before training: \033[0m\n";
+	test_CNN(&testing_data, &net);
 
-	for (Index j = 0; j < 102; ++j) {
-		// if (value > 0.01) {
-		cout << "result[" << j << "] = " << result[j] << endl;
-		// }
-	}
+	// for (int i = 0; i < 40; i++) {
+	// 	float result_before = forward(&training_data[0], &net);
+	// 	cout << "\n\033[1;34mMSE: " << result_before << " \033[0m\n";
+	//
+	// 	cout << "Cycle #" << i << endl;
+	// 	net.backward(training_data[0].label);
+	// }
+	//
+	// cout << "\n\033[1;34mMSE: Test results after training: \033[0m\n";
+	// test_CNN(&testing_data, &net);
 }
