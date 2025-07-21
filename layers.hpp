@@ -489,6 +489,18 @@ class FullyConnectedLayer : public Layer {
 	void backward(float learning_rate) override {
 		update_gradients();
 
+		cout << "Conv grad weights:" << endl;
+		for (int j = 0; j < 10; j++) {
+			cout << weight_gradients.data()[j] << " ";
+		}
+
+		cout << endl;
+		cout << "Conv grad biases:" << endl;
+		for (int j = 0; j < 10; j++) {
+			cout << bias_gradients.data()[j] << " ";
+		}
+		cout << endl;
+
 		weights -= learning_rate * weight_gradients;
 		biases -= learning_rate * bias_gradients;
 	}
@@ -668,7 +680,10 @@ class CNN {
 		layers.clear();
 	}
 
-	void set_input_data(Tensor<float, 3> *input_data) { data_buffer[0] = input_data; }
+	void set_input_data(Tensor<float, 3> *input_image) {
+		data_buffer[0] = input_image;
+		layers[0]->input_data = input_image;
+	}
 
 	void add_convolutional_layer(const array<Index, 2> &kernel_dims, Index filters, Index stride) {
 		ConvolutionalLayer *layer = new ConvolutionalLayer(&data_buffer, &gradient_buffer, kernel_dims, filters, stride);

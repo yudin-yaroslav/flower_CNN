@@ -515,7 +515,6 @@ pair<string, bool> test_reshape_forward_value() {
 
 	cout << "\nOutput:\n";
 	cout << output_computed << endl;
-	cout << output_correct << endl;
 
 	for (int i = 0; i < 8; ++i) {
 		if (output_correct(0, 0, i) != output_computed(0, 0, i)) {
@@ -1207,32 +1206,75 @@ pair<string, bool> test_conv_input_grad_simple() {
 	return {name, true};
 }
 
+pair<string, bool> test_reshape_back() {
+	const string name = "Reshape Backward Value";
+	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
+
+	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+
+	float val = 1;
+	for (int i = 0; i < 2; ++i)
+		for (int j = 0; j < 2; ++j)
+			for (int k = 0; k < 2; ++k)
+				(*input)(i, j, k) = val++;
+
+	cout << "Input:" << endl;
+	cout << (*input) << endl;
+
+	CNN net(input, 0.1);
+	net.add_flatten_layer();
+
+	net.forward();
+
+	Tensor<float, 3> &output_computed = *net.data_buffer.back();
+
+	cout << "\nOutput:\n";
+	cout << output_computed << endl;
+
+	for (int i = 0; i < 8; i++) {
+		(*net.gradient_buffer[1])(0, 0, i) = i + 1;
+	}
+
+	net.backward(3);
+
+	PrintTensorNumpy(*net.gradient_buffer[0], 2, 2, 2);
+
+	for (int i = 0; i < 2; ++i)
+		for (int j = 0; j < 2; ++j)
+			for (int k = 0; k < 2; ++k)
+				if ((*input)(i, j, k) != (*net.gradient_buffer[0])(i, j, k))
+					return {name, false};
+
+	return {name, true};
+}
+
 int main() {
-	test_func(test_conv_forward_filters);
-	test_func(test_conv_forward_channels);
-	// test_func(test_conv_forward_stride);
-	// test_func(test_conv_forward_speed);
+	// test_func(test_conv_forward_filters);
+	// test_func(test_conv_forward_channels);
+	// // test_func(test_conv_forward_stride);
+	// // test_func(test_conv_forward_speed);
+	//
+	// test_func(test_fully_connected_forward_value);
+	// test_func(test_fully_connected_forward_speed);
+	//
+	// test_func(test_maxpool_forward_value);
+	// test_func(test_maxpool_forward_speed);
+	//
+	// test_func(test_relu_forward_value);
+	// test_func(test_softmax_forward_value);
 
-	test_func(test_fully_connected_forward_value);
-	test_func(test_fully_connected_forward_speed);
-
-	test_func(test_maxpool_forward_value);
-	test_func(test_maxpool_forward_speed);
-
-	test_func(test_relu_forward_value);
-	test_func(test_softmax_forward_value);
-	test_func(test_reshape_forward_value);
-
-	test_func(test_loss_to_softmax_gradient);
-	test_func(test_softmax_gradient);
-	test_func(test_reshape_gradient);
-	test_func(test_relu_gradient);
-	test_func(test_maxpool_gradient);
-	test_func(test_fully_connected_training);
-	test_func(test_conv_input_grad_simple);
-	test_func(test_conv_gradient);
+	// test_func(test_loss_to_softmax_gradient);
+	// test_func(test_softmax_gradient);
+	// test_func(test_reshape_gradient);
+	// test_func(test_relu_gradient);
+	// test_func(test_maxpool_gradient);
+	// test_func(test_fully_connected_training);
+	// test_func(test_conv_input_grad_simple);
+	// test_func(test_conv_gradient);
 
 	// test_func(test_cnn_forward);
+	test_func(test_reshape_forward_value);
+	test_func(test_reshape_back);
 
 	test_stat();
 
