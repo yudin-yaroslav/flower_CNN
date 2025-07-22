@@ -90,11 +90,11 @@ class ConvolutionalLayer : public Layer {
 
 		this->output_sizes = {K, P, Q};
 
-		biases = MatrixXf::Random(K, P * Q) / 1000.0f;
-		kernel = MatrixXf::Random(K, R * S * C) / 1000.0f;
+		biases = MatrixXf::Constant(K, P * Q, 0.001);
+		kernel = MatrixXf::Constant(K, R * S * C, 0.001);
 
-		bias_gradients = MatrixXf::Random(K, P * Q) / 1000.0f;
-		kernel_gradients = MatrixXf::Random(K, R * S * C) / 1000.0f;
+		bias_gradients = MatrixXf::Constant(K, P * Q, 0.001);
+		kernel_gradients = MatrixXf::Constant(K, R * S * C, 0.001);
 
 		attach_network(buffers_ptr, gradients_ptr);
 
@@ -157,6 +157,7 @@ class ConvolutionalLayer : public Layer {
 	}
 
 	void update_bias_gradients() {
+
 		for (Index f = 0; f < K; f++) {
 			for (Index r = 0; r < P; r++) {
 				for (Index c = 0; c < Q; c++) {
@@ -423,11 +424,11 @@ class FullyConnectedLayer : public Layer {
 	Index output_size;
 
 	FullyConnectedLayer(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr, Index output_dim) {
-		weights = MatrixXf::Random(output_dim, buffers_ptr->back()->dimensions()[2]) / 1000.0f;
-		biases = VectorXf::Random(output_dim) / 1000.0f;
+		weights = MatrixXf::Constant(output_dim, buffers_ptr->back()->dimensions()[2], 0.001);
+		biases = VectorXf::Constant(output_dim, 0.001);
 
-		weight_gradients = MatrixXf::Random(output_dim, buffers_ptr->back()->dimensions()[2]) / 1000.0f;
-		bias_gradients = VectorXf::Random(output_dim) / 1000.0f;
+		weight_gradients = MatrixXf::Constant(output_dim, buffers_ptr->back()->dimensions()[2], 0.001);
+		bias_gradients = VectorXf::Constant(output_dim, 0.001);
 
 		this->input_size = buffers_ptr->back()->dimensions()[2];
 		this->output_size = output_dim;
@@ -438,7 +439,7 @@ class FullyConnectedLayer : public Layer {
 	void attach_network(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) override {
 		this->input_data = buffers_ptr->back();
 		this->input_gradients = gradients_ptr->back();
-		input_gradients->setRandom();
+		input_gradients->setConstant(0.001);
 
 		Tensor<float, 3> *output = new Tensor<float, 3>(1, 1, output_size);
 		this->output_data = output;
@@ -496,10 +497,10 @@ class FullyConnectedLayer : public Layer {
 
 		cout << endl;
 		cout << "Conv grad biases:" << endl;
-		for (int j = 0; j < 10; j++) {
+		for (int j = 0; j < 2; j++) {
 			cout << bias_gradients.data()[j] << " ";
 		}
-		cout << endl;
+		cout << endl << endl;
 
 		weights -= learning_rate * weight_gradients;
 		biases -= learning_rate * bias_gradients;
@@ -626,6 +627,20 @@ class ReshapeLayer : public Layer {
 	}
 
 	void backward(float learning_rate = 0.0f) override {
+		// Tensor<float, 3> tensor = (*output_gradients);
+		// float *tensor_ptr = tensor.data();
+		//
+		// const array<Index, 3> dims = tensor.dimensions();
+		// float counter = 0;
+		// for (int j = 0; j < dims[0] * dims[1] * dims[2]; j++) {
+		// 	if (tensor_ptr[j] != 0.0f) {
+		// 		counter++;
+		// 	}
+		// }
+		// cout << endl;
+		// cout << "Output gradients has " << counter / (dims[0] * dims[1] * dims[2]) << " as the percentage of non-zero
+		// values\n";
+
 		for (Index i = 0; i < input_sizes[0]; ++i) {
 			for (Index j = 0; j < input_sizes[1]; ++j) {
 				for (Index k = 0; k < input_sizes[2]; ++k) {
@@ -770,21 +785,25 @@ class CNN {
 			}
 		}
 
-		// for (int i = 0; i < number_of_layers + 1; i++) {
+		// cout << endl << endl;
+		// for (int i = 2; i < number_of_layers + 1; i++) {
 		// 	Tensor<float, 3> tensor = *gradient_buffer[i];
 		// 	float *tensor_ptr = tensor.data();
 		//
 		// 	const array<Index, 3> dims = tensor.dimensions();
 		// 	float counter = 0;
-		// 	for (int j = 0; j < 100 && j < dims[0] * dims[1] * dims[2]; j++) {
-		// 		cout << tensor_ptr[j] << " ";
+		// 	for (int j = 0; j < dims[0] * dims[1] * dims[2]; j++) {
 		// 		if (tensor_ptr[j] != 0.0f) {
 		// 			counter++;
 		// 		}
 		// 	}
+		// 	for (int j = 0; j < 100 && j < dims[0] * dims[1] * dims[2]; j++) {
+		// 		cout << tensor_ptr[j] << " ";
+		// 	}
 		// 	cout << endl;
-		// 	cout << "Layer #" << i << ": " << counter / 100 << "\n";
+		// 	cout << "Layer #" << i << ": " << counter << ", " << (dims[0] * dims[1] * dims[2]) << "\n";
 		// }
+		// cout << endl << endl;
 
 		for (int i = number_of_layers - 1; i >= 0; i--) {
 			layers[i]->backward(learning_rate);

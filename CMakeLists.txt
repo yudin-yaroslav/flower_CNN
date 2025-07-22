@@ -12,8 +12,8 @@ add_executable(main.out main.cpp)
 target_include_directories(main.out PRIVATE ${OpenCV_INCLUDE_DIRS} /usr/include/eigen3)
 target_link_libraries(main.out PRIVATE ${OpenCV_LIBS})
 
-add_executable(test.out test.cpp)
-target_include_directories(test.out PRIVATE ${OpenCV_INCLUDE_DIRS} /usr/include/eigen3)
-target_link_libraries(test.out PRIVATE ${OpenCV_LIBS})
+# add_executable(test.out test.cpp)
+# target_include_directories(test.out PRIVATE ${OpenCV_INCLUDE_DIRS} /usr/include/eigen3)
+# target_link_libraries(test.out PRIVATE ${OpenCV_LIBS})
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

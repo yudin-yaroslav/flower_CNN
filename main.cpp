@@ -8,6 +8,7 @@ float get_MSE(Sample *sample, CNN *net) {
 }
 
 bool get_correct(Sample *sample, CNN *net) {
+	cout << "Testing sample with label " << sample->label << endl;
 	net->set_input_data(&(sample->image));
 	net->forward();
 
@@ -15,7 +16,6 @@ bool get_correct(Sample *sample, CNN *net) {
 	auto max_iter = std::max_element(predictions.begin(), predictions.end());
 	int index = std::distance(predictions.begin(), max_iter);
 
-	cout << index << endl;
 	if (index == sample->label) {
 		return true;
 	}
@@ -46,7 +46,7 @@ void train_CNN(vector<Sample> *training_data, CNN *net) {
 	vector<Sample> &data = *training_data;
 
 	for (int i = 0; i < data.size(); i++) {
-		cout << "Training image #" << i << endl;
+		cout << "Training image #" << i << " with label " << data[i].label << endl;
 
 		net->set_input_data(&(data[i].image));
 		net->forward();
@@ -55,7 +55,7 @@ void train_CNN(vector<Sample> *training_data, CNN *net) {
 }
 
 int main() {
-	const int C = 3, H = 256, W = 256;
+	const int C = 3, H = 32, W = 32;
 
 	vector<Sample> training_data = load_dataset("../dataset/train", H, W, 105);
 	cout << "Loaded " << training_data.size() << " training samples.\n";
@@ -63,13 +63,13 @@ int main() {
 	vector<Sample> testing_data = load_dataset("../dataset/test", H, W, 10);
 	cout << "Loaded " << testing_data.size() << " testing samples.\n";
 
-	CNN *net = new CNN(&(training_data[0].image), 10.0);
+	CNN *net = new CNN(&(training_data[0].image), 0.01);
 
 	net->add_convolutional_layer({4, 4}, 10, 1); // -> 254x254x32
 	net->add_relu_layer();
-	net->add_maxpooling_layer({2, 2}, 2); // -> 127x127x32
+	// net->add_maxpooling_layer({2, 2}, 2); // -> 127x127x32
 
-	// net.add_convolutional_layer({3, 3}, 64, 1); // -> 125x125x64
+	net->add_convolutional_layer({3, 3}, 64, 1); // -> 125x125x64
 	// net.add_relu_layer();
 	// net.add_maxpooling_layer({2, 2}, 2); // -> 62x62x64
 
@@ -81,9 +81,9 @@ int main() {
 	// net.add_relu_layer();
 	// net.add_maxpooling_layer({2, 2}, 2); // -> 14x14x256
 
-	net->add_flatten_layer();			 // -> 14*14*256 = 50176
-	net->add_fully_connected_layer(128); // ~25M params here!
-	net->add_fully_connected_layer(102); // final
+	net->add_flatten_layer(); // -> 14*14*256 = 50176
+	// net->add_fully_connected_layer(30); // ~25M params here!
+	net->add_fully_connected_layer(2); // final
 	net->add_softmax_layer();
 
 	cout << "Initialized CNN." << endl;
@@ -93,43 +93,48 @@ int main() {
 
 	cout << "\n\n\033[1;34mMSE: Starting training: \033[0m\n";
 	train_CNN(&training_data, net);
+	train_CNN(&training_data, net);
+	train_CNN(&training_data, net);
+	train_CNN(&training_data, net);
+	train_CNN(&training_data, net);
+	train_CNN(&training_data, net);
 
-	// cout << "\n\033[1;34mMSE: Test results after training: \033[0m\n";
-	// test_CNN(&testing_data, net);
-	//
-	// cout << "\n\033[1;34mMSE: Predictions of testing_data: \033[0m\n";
-	// get_correct(&(testing_data[0]), net);
-	// float test_1 = net->predictions[0];
-	// for (int i = 0; i < 4; i++) {
-	// 	cout << net->predictions[i] << endl;
-	// }
-	// cout << endl;
-	//
-	// get_correct(&(testing_data[1]), net);
-	// float test_2 = net->predictions[0];
-	// for (int i = 0; i < 4; i++) {
-	// 	cout << net->predictions[i] << endl;
-	// }
-	// cout << endl;
-	//
-	// get_correct(&(testing_data[5]), net);
-	// for (int i = 0; i < 4; i++) {
-	// 	cout << net->predictions[i] << endl;
-	// }
-	// cout << endl;
-	//
-	// get_correct(&(testing_data[7]), net);
-	// for (int i = 0; i < 4; i++) {
-	// 	cout << net->predictions[i] << endl;
-	// }
-	// cout << endl;
+	cout << "\n\033[1;34mMSE: Test results after training: \033[0m\n";
+	test_CNN(&testing_data, net);
 
-	for (int i = 0; i < net->number_of_layers + 1; i++) {
-		float *grad_ptr = net->gradient_buffer[i]->data();
-		cout << "Gradient #" << i << ": ";
-		for (int j = 0; j < 10; j++) {
-			cout << grad_ptr[j] << " ";
-		}
-		cout << endl;
+	cout << "\n\033[1;34mMSE: Predictions of testing_data: \033[0m\n";
+	get_correct(&(testing_data[0]), net);
+	float test_1 = net->predictions[0];
+	for (int i = 0; i < 2; i++) {
+		cout << net->predictions[i] << endl;
 	}
+	cout << endl;
+
+	get_correct(&(testing_data[1]), net);
+	float test_2 = net->predictions[0];
+	for (int i = 0; i < 2; i++) {
+		cout << net->predictions[i] << endl;
+	}
+	cout << endl;
+
+	get_correct(&(testing_data[5]), net);
+	for (int i = 0; i < 2; i++) {
+		cout << net->predictions[i] << endl;
+	}
+	cout << endl;
+
+	get_correct(&(testing_data[7]), net);
+	for (int i = 0; i < 2; i++) {
+		cout << net->predictions[i] << endl;
+	}
+	cout << endl;
+
+	// for (int i = 0; i < net->number_of_layers + 1; i++) {
+	// 	float *grad_ptr = net->gradient_buffer[i]->data();
+	// 	cout << "Gradient #" << i << ": ";
+	// 	for (int j = 0; j < 10; j++) {
+	// 		cout << grad_ptr[j] << " ";
+	// 	}
+	// 	cout << endl;
+	// }
 }

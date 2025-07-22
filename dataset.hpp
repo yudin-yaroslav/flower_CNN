@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <map>
 #include <opencv2/opencv.hpp>
+#include <random>
 #include <unsupported/Eigen/CXX11/Tensor>
 #include <vector>
 
@@ -59,6 +60,9 @@ vector<Sample> load_dataset(const string &root_dir, int H, int W, int number_of_
 			dataset.push_back({img_tensor, label});
 		}
 	}
+	std::random_device rd;
+	std::mt19937 g(rd());
+	std::shuffle(dataset.begin(), dataset.end(), g);
 
 	return dataset;
 }
