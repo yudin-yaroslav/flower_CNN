@@ -1,8 +1,9 @@
 #include "dataset.hpp"
 #include "tensor_print.hpp"
 #include <iostream>
+#include <memory>
+#include <random>
 #include <stdexcept>
-#include <typeinfo>
 #include <vector>
 
 #include <Eigen/Core>
@@ -10,39 +11,44 @@
 #define EIGEN_DONT_PARALLELIZE false
 
 using namespace Eigen;
-using std::cout, std::endl, std::vector;
+using std::cout, std::endl;
+using std::unique_ptr, std::shared_ptr, std::make_unique, std::make_shared;
+using std::vector;
 
 class Layer {
   public:
-	Tensor<float, 3> *input_data = nullptr;
-	Tensor<float, 3> *output_data = nullptr;
+	shared_ptr<Tensor<float, 3>> input_data = nullptr;
+	shared_ptr<Tensor<float, 3>> output_data = nullptr;
 
-	Tensor<float, 3> *input_gradients = nullptr;
-	Tensor<float, 3> *output_gradients = nullptr;
+	shared_ptr<Tensor<float, 3>> input_gradients = nullptr;
+	shared_ptr<Tensor<float, 3>> output_gradients = nullptr;
 
-	virtual void attach_network(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) {
+	virtual void attach_network(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr,
+								vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) {
 		this->input_data = buffers_ptr->back();
 		this->input_gradients = gradients_ptr->back();
 
-		Tensor<float, 3> *output_data = new Tensor<float, 3>(input_data->dimensions());
-		this->output_data = output_data;
+		this->output_data = make_shared<Tensor<float, 3>>(input_data->dimensions());
 		buffers_ptr->push_back(output_data);
 
-		Tensor<float, 3> *output_gradient = new Tensor<float, 3>(output_data->dimensions());
-		this->output_gradients = output_gradient;
-		gradients_ptr->push_back(output_gradient);
+		this->output_gradients = make_shared<Tensor<float, 3>>(output_data->dimensions());
+		gradients_ptr->push_back(output_gradients);
 	};
 
 	virtual void forward() = 0;
 	virtual void backward(float learning_rate) = 0;
 
-	virtual ~Layer() = default;
+	virtual ~Layer() {
+		input_data.reset();
+		output_data.reset();
+		input_gradients.reset();
+		output_gradients.reset();
+	};
 };
 
 class ConvolutionalLayer : public Layer {
   public:
 	vector<Index> input_reshaped_for_forw_indices;
-	// vector<Index> input_reshaped_for_back_indices;
 
 	vector<Index> out_grad_reshaped_for_input_indices;
 	vector<Index> out_grad_reshaped_for_ker_indices;
@@ -63,7 +69,7 @@ class ConvolutionalLayer : public Layer {
 	Index filters;
 	Index channels;
 
-	ConvolutionalLayer(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr,
+	ConvolutionalLayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr,
 					   const array<Index, 2> &kernel_dims, Index filters, Index stride) {
 		this->input_sizes = buffers_ptr->back()->dimensions();
 		this->kernel_sizes = kernel_dims;
@@ -83,18 +89,18 @@ class ConvolutionalLayer : public Layer {
 		this->P = (H - R) / stride + 1;
 		this->Q = (W - S) / stride + 1;
 
-		this->H_pad = P + (R - 1) * 2;
-		this->W_pad = Q + (S - 1) * 2;
-		this->P_pad = H_pad - R + 1;
-		this->Q_pad = W_pad - S + 1;
+		this->H_back = (stride - 1) * (P - 1) + P + (R - 1) * 2;
+		this->W_back = (stride - 1) * (Q - 1) + Q + (S - 1) * 2;
+		this->P_back = H_back - R + 1;
+		this->Q_back = W_back - S + 1;
 
 		this->output_sizes = {K, P, Q};
 
-		biases = MatrixXf::Constant(K, P * Q, 0.001);
-		kernel = MatrixXf::Constant(K, R * S * C, 0.001);
+		kernel = MatrixXf::Random(K, R * S * C) / 1000.0f;
+		biases = MatrixXf::Zero(K, P * Q);
 
-		bias_gradients = MatrixXf::Constant(K, P * Q, 0.001);
-		kernel_gradients = MatrixXf::Constant(K, R * S * C, 0.001);
+		bias_gradients = MatrixXf::Zero(K, P * Q);
+		kernel_gradients = MatrixXf::Zero(K, R * S * C);
 
 		attach_network(buffers_ptr, gradients_ptr);
 
@@ -104,17 +110,16 @@ class ConvolutionalLayer : public Layer {
 		reindex_kernels();
 	}
 
-	void attach_network(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) override {
+	void attach_network(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr,
+						vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) override {
 		this->input_data = buffers_ptr->back();
 		this->input_gradients = gradients_ptr->back();
 
-		Tensor<float, 3> *output = new Tensor<float, 3>(output_sizes);
-		this->output_data = output;
-		buffers_ptr->push_back(output);
+		this->output_data = make_shared<Tensor<float, 3>>(output_sizes);
+		buffers_ptr->push_back(output_data);
 
-		Tensor<float, 3> *output_gradient = new Tensor<float, 3>(output_data->dimensions());
-		this->output_gradients = output_gradient;
-		gradients_ptr->push_back(output_gradient);
+		this->output_gradients = make_shared<Tensor<float, 3>>(output_data->dimensions());
+		gradients_ptr->push_back(output_gradients);
 	}
 
 	void update_input_gradients() {
@@ -129,11 +134,11 @@ class ConvolutionalLayer : public Layer {
 		// cout << "\nKernel reshaped for input: " << endl;
 		// PrintMatrixNumpy(kernel_reshaped, C, K * R * S);
 
-		MatrixXf output_grad_reshaped_in(K * R * S, P_pad * Q_pad);
+		MatrixXf output_grad_reshaped_in(K * R * S, P_back * Q_back);
 		float *out_ptr_in = output_gradients->data();
 		float *out_reshaped_ptr_in = output_grad_reshaped_in.data();
 
-		for (Index i = 0; i < (K * R * S) * (P_pad * Q_pad); ++i) {
+		for (Index i = 0; i < (K * R * S) * (P_back * Q_back); ++i) {
 			if (out_grad_reshaped_for_input_indices[i] == K * R * S) {
 				out_reshaped_ptr_in[i] = 0.0f;
 			} else {
@@ -157,7 +162,6 @@ class ConvolutionalLayer : public Layer {
 	}
 
 	void update_bias_gradients() {
-
 		for (Index f = 0; f < K; f++) {
 			for (Index r = 0; r < P; r++) {
 				for (Index c = 0; c < Q; c++) {
@@ -223,7 +227,7 @@ class ConvolutionalLayer : public Layer {
 
   private:
 	Index C, R, S, P, Q, H, W, K;
-	Index H_pad, W_pad, P_pad, Q_pad;
+	Index H_back, W_back, P_back, Q_back;
 
 	void reindex_input_data_for_forw() {
 		input_reshaped_for_forw_indices.resize(C * R * S * P * Q);
@@ -241,25 +245,21 @@ class ConvolutionalLayer : public Layer {
 				Index pos_r = kernel_r * stride + value_r;
 				Index pos_c = kernel_c * stride + value_c;
 
-				// WARNING: In memory matrices are column-major
 				input_reshaped_for_forw_indices[b * S * R * C + a] = pos_c * H * C + pos_r * C + current_channel;
 			}
 		}
 	}
 
 	void reindex_output_gradient_for_input() {
-		if (P_pad != H || Q_pad != W) {
-			throw std::logic_error("Stride is not implemented yet");
-		}
-
-		out_grad_reshaped_for_input_indices.resize(R * S * K * P_pad * Q_pad);
+		out_grad_reshaped_for_input_indices.resize(R * S * K * P_back * Q_back);
+		fill(out_grad_reshaped_for_input_indices.begin(), out_grad_reshaped_for_input_indices.end(), P * Q * K);
 		for (Index a = 0; a < K * R * S; a++) {
-			for (Index b = 0; b < P_pad * Q_pad; b++) {
+			for (Index b = 0; b < P_back * Q_back; b++) {
 
 				Index current_filter = a / (R * S);
 
-				Index kernel_r = b / Q_pad;
-				Index kernel_c = b % Q_pad;
+				Index kernel_r = b / Q_back;
+				Index kernel_c = b % Q_back;
 
 				Index value_r = (a % (R * S)) / R;
 				Index value_c = (a % (R * S)) % R;
@@ -267,14 +267,16 @@ class ConvolutionalLayer : public Layer {
 				Index pos_r = kernel_r * stride + value_r;
 				Index pos_c = kernel_c * stride + value_c;
 
-				// WARNING: In memory matrices are column-majorc
-
-				if (pos_r < R - 1 || pos_r >= P + (R - 1) || pos_c < S - 1 || pos_c >= Q + (S - 1)) {
-					out_grad_reshaped_for_input_indices[b * S * R * K + a] = P * Q * K;
-				} else {
+				if (pos_r >= R - 1 && pos_r <= H + R - 2 && pos_c >= S - 1 && pos_c <= W + S - 2) {
 					pos_r -= (R - 1);
 					pos_c -= (S - 1);
-					out_grad_reshaped_for_input_indices[b * S * R * K + a] = pos_c * P * K + pos_r * K + current_filter;
+
+					if (pos_r % stride == 0 && pos_c % stride == 0) {
+						pos_r /= stride;
+						pos_c /= stride;
+
+						out_grad_reshaped_for_input_indices[b * S * R * K + a] = pos_c * P * K + pos_r * K + current_filter;
+					}
 				}
 			}
 		}
@@ -308,29 +310,6 @@ class ConvolutionalLayer : public Layer {
 			}
 		}
 	}
-
-	// void reindex_input_data_for_back() {
-	// 	input_reshaped_for_back_indices.resize(C * R * S * P * Q);
-	//
-	// 	for (Index a = 0; a < C * R * S; a++) {
-	// 		for (Index b = 0; b < P * Q; b++) {
-	//
-	// 			Index current_channel = a / (R * S);
-	//
-	// 			Index kernel_r = b / Q;
-	// 			Index kernel_c = b % Q;
-	//
-	// 			Index value_r = (a % (R * S)) / R;
-	// 			Index value_c = (a % (R * S)) % R;
-	//
-	// 			Index pos_r = kernel_r * stride + value_r;
-	// 			Index pos_c = kernel_c * stride + value_c;
-	//
-	// 			// WARNING: In memory matrices are column-major
-	// 			input_reshaped_for_forw_indices[b * S * R * C + a] = pos_c * H * C + pos_r * C + current_channel;
-	// 		}
-	// 	}
-	// }
 };
 
 class MaxPoolingLayer : public Layer {
@@ -341,7 +320,7 @@ class MaxPoolingLayer : public Layer {
 
 	Index stride;
 
-	MaxPoolingLayer(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr,
+	MaxPoolingLayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr,
 					const array<Index, 2> &kernel_dims, Index stride) {
 		this->input_sizes = buffers_ptr->back()->dimensions();
 		this->kernel_sizes = kernel_dims;
@@ -353,17 +332,16 @@ class MaxPoolingLayer : public Layer {
 		attach_network(buffers_ptr, gradients_ptr);
 	}
 
-	void attach_network(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) override {
+	void attach_network(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr,
+						vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) override {
 		this->input_data = buffers_ptr->back();
 		this->input_gradients = gradients_ptr->back();
 
-		Tensor<float, 3> *output = new Tensor<float, 3>(output_sizes);
-		this->output_data = output;
-		buffers_ptr->push_back(output);
+		this->output_data = make_shared<Tensor<float, 3>>(output_sizes);
+		buffers_ptr->push_back(output_data);
 
-		Tensor<float, 3> *output_gradient = new Tensor<float, 3>(output_data->dimensions());
-		this->output_gradients = output_gradient;
-		gradients_ptr->push_back(output_gradient);
+		this->output_gradients = make_shared<Tensor<float, 3>>(output_data->dimensions());
+		gradients_ptr->push_back(output_gradients);
 	}
 
 	void forward() override {
@@ -423,31 +401,34 @@ class FullyConnectedLayer : public Layer {
 	Index input_size;
 	Index output_size;
 
-	FullyConnectedLayer(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr, Index output_dim) {
-		weights = MatrixXf::Constant(output_dim, buffers_ptr->back()->dimensions()[2], 0.001);
-		biases = VectorXf::Constant(output_dim, 0.001);
+	float scale;
 
-		weight_gradients = MatrixXf::Constant(output_dim, buffers_ptr->back()->dimensions()[2], 0.001);
-		bias_gradients = VectorXf::Constant(output_dim, 0.001);
-
+	FullyConnectedLayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr,
+						Index output_dim) {
 		this->input_size = buffers_ptr->back()->dimensions()[2];
 		this->output_size = output_dim;
+
+		scale = std::sqrt(2.0f / (input_size + output_size));
+
+		weights = MatrixXf::NullaryExpr(output_size, input_size, [&]() { return (2.0f * rand() / RAND_MAX - 1.0f) * scale; });
+		biases = VectorXf::Zero(output_dim);
+
+		weight_gradients = MatrixXf::Zero(output_size, input_size);
+		bias_gradients = VectorXf::Zero(output_size);
 
 		attach_network(buffers_ptr, gradients_ptr);
 	}
 
-	void attach_network(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) override {
+	void attach_network(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr,
+						vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) override {
 		this->input_data = buffers_ptr->back();
 		this->input_gradients = gradients_ptr->back();
-		input_gradients->setConstant(0.001);
 
-		Tensor<float, 3> *output = new Tensor<float, 3>(1, 1, output_size);
-		this->output_data = output;
-		buffers_ptr->push_back(output);
+		this->output_data = make_shared<Tensor<float, 3>>(1, 1, output_size);
+		buffers_ptr->push_back(output_data);
 
-		Tensor<float, 3> *output_gradient = new Tensor<float, 3>(output_data->dimensions());
-		this->output_gradients = output_gradient;
-		gradients_ptr->push_back(output_gradient);
+		this->output_gradients = make_shared<Tensor<float, 3>>(output_data->dimensions());
+		gradients_ptr->push_back(output_gradients);
 	}
 
 	void update_gradients() {
@@ -490,17 +471,17 @@ class FullyConnectedLayer : public Layer {
 	void backward(float learning_rate) override {
 		update_gradients();
 
-		cout << "Conv grad weights:" << endl;
-		for (int j = 0; j < 10; j++) {
-			cout << weight_gradients.data()[j] << " ";
-		}
-
-		cout << endl;
-		cout << "Conv grad biases:" << endl;
-		for (int j = 0; j < 2; j++) {
-			cout << bias_gradients.data()[j] << " ";
-		}
-		cout << endl << endl;
+		// cout << "Conv grad weights:" << endl;
+		// for (int j = 0; j < 10; j++) {
+		// 	cout << weight_gradients.data()[j] << " ";
+		// }
+		//
+		// cout << endl;
+		// cout << "Conv grad biases:" << endl;
+		// for (int j = 0; j < 2; j++) {
+		// 	cout << bias_gradients.data()[j] << " ";
+		// }
+		// cout << endl << endl;
 
 		weights -= learning_rate * weight_gradients;
 		biases -= learning_rate * bias_gradients;
@@ -511,7 +492,7 @@ class ReLULayer : public Layer {
   public:
 	array<Index, 3> input_sizes;
 
-	ReLULayer(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) {
+	ReLULayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) {
 		this->input_sizes = buffers_ptr->back()->dimensions();
 
 		attach_network(buffers_ptr, gradients_ptr);
@@ -538,9 +519,9 @@ class ReLULayer : public Layer {
 
 class SoftMaxLayer : public Layer {
   public:
-	Index input_size;
+	Index layer_size;
 
-	SoftMaxLayer(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) {
+	SoftMaxLayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) {
 		const array<Index, 3> dims = buffers_ptr->back()->dimensions();
 
 		if (buffers_ptr->back()->dimensions()[0] != 1 || buffers_ptr->back()->dimensions()[1] != 1) {
@@ -548,7 +529,7 @@ class SoftMaxLayer : public Layer {
 				"SoftMax works EXCLUSIVELY after fully-connected layers, but the shape of input layer is (" +
 				std::to_string(dims[0]) + ", " + std::to_string(dims[1]) + ", " + std::to_string(dims[2]) + ")");
 		}
-		this->input_size = dims[2];
+		this->layer_size = dims[2];
 
 		attach_network(buffers_ptr, gradients_ptr);
 	};
@@ -558,19 +539,19 @@ class SoftMaxLayer : public Layer {
 		float max_value = max_tensor(0);
 
 		float sum = 0.0f;
-		for (Index i = 0; i < input_size; i++) {
+		for (Index i = 0; i < layer_size; i++) {
 			sum += exp((*input_data)(0, 0, i) - max_value);
 		}
 
-		for (Index i = 0; i < input_size; ++i) {
+		for (Index i = 0; i < layer_size; ++i) {
 			(*output_data)(0, 0, i) = exp((*input_data)(0, 0, i) - max_value) / sum;
 		}
 	}
 
 	void backward(float learning_rate) override {
-		for (Index i = 0; i < input_size; i++) {
+		for (Index i = 0; i < layer_size; i++) {
 			float sum = 0.0f;
-			for (Index j = 0; j < input_size; j++) {
+			for (Index j = 0; j < layer_size; j++) {
 				if (j == i) {
 					sum += (*output_gradients)(0, 0, j) * (*output_data)(0, 0, i) * (1 - (*output_data)(0, 0, i));
 				} else {
@@ -589,7 +570,7 @@ class ReshapeLayer : public Layer {
 
 	Index length;
 
-	ReshapeLayer(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr,
+	ReshapeLayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr,
 				 const array<Index, 3> &output_dims) {
 		this->input_sizes = buffers_ptr->back()->dimensions();
 		this->output_sizes = output_dims;
@@ -602,17 +583,16 @@ class ReshapeLayer : public Layer {
 		attach_network(buffers_ptr, gradients_ptr);
 	}
 
-	void attach_network(vector<Tensor<float, 3> *> *buffers_ptr, vector<Tensor<float, 3> *> *gradients_ptr) override {
+	void attach_network(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr,
+						vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) override {
 		this->input_data = buffers_ptr->back();
 		this->input_gradients = gradients_ptr->back();
 
-		Tensor<float, 3> *output = new Tensor<float, 3>(output_sizes);
-		this->output_data = output;
-		buffers_ptr->push_back(output);
+		this->output_data = make_shared<Tensor<float, 3>>(output_sizes);
+		buffers_ptr->push_back(output_data);
 
-		Tensor<float, 3> *output_gradient = new Tensor<float, 3>(output_data->dimensions());
-		this->output_gradients = output_gradient;
-		gradients_ptr->push_back(output_gradient);
+		this->output_gradients = make_shared<Tensor<float, 3>>(output_data->dimensions());
+		gradients_ptr->push_back(output_gradients);
 	}
 
 	void forward() override {
@@ -654,10 +634,10 @@ class ReshapeLayer : public Layer {
 
 class CNN {
   public:
-	vector<Tensor<float, 3> *> data_buffer;
-	vector<Tensor<float, 3> *> gradient_buffer;
+	vector<shared_ptr<Tensor<float, 3>>> data_buffer;
+	vector<shared_ptr<Tensor<float, 3>>> gradient_buffer;
 
-	vector<Layer *> layers;
+	vector<unique_ptr<Layer>> layers;
 	int number_of_layers;
 
 	float learning_rate;
@@ -665,12 +645,11 @@ class CNN {
 
 	vector<float> predictions;
 
-	CNN(Tensor<float, 3> *input_data, float learning_rate) {
+	CNN(const Tensor<float, 3> &image_data, float learning_rate) {
 		srand((unsigned int)time(0));
-		Tensor<float, 3> *input_gradient_dummy = new Tensor<float, 3>(input_data->dimensions());
 
-		data_buffer.push_back(input_data);
-		gradient_buffer.push_back(input_gradient_dummy);
+		data_buffer.push_back(make_shared<Tensor<float, 3>>(image_data));
+		gradient_buffer.push_back(make_shared<Tensor<float, 3>>(image_data.dimensions()));
 
 		this->learning_rate = learning_rate;
 		number_of_layers = 0;
@@ -678,71 +657,56 @@ class CNN {
 
 	CNN(const array<Index, 3> image_dims, float learning_rate) {
 		srand((unsigned int)time(0));
-		Tensor<float, 3> *input_data_dummy = new Tensor<float, 3>(image_dims);
-		Tensor<float, 3> *input_gradient_dummy = new Tensor<float, 3>(image_dims);
 
-		data_buffer.push_back(input_data_dummy);
-		gradient_buffer.push_back(input_gradient_dummy);
+		data_buffer.push_back(make_shared<Tensor<float, 3>>(image_dims));
+		gradient_buffer.push_back(make_shared<Tensor<float, 3>>(image_dims));
 
 		this->learning_rate = learning_rate;
 		number_of_layers = 0;
 	}
 
-	~CNN() {
-		for (auto layer : layers) {
-			delete layer;
-		}
-		layers.clear();
-	}
-
-	void set_input_data(Tensor<float, 3> *input_image) {
-		data_buffer[0] = input_image;
-		layers[0]->input_data = input_image;
+	void set_input_data(const Tensor<float, 3> &image_data) {
+		*data_buffer[0] = image_data;
+		*layers[0]->input_data = image_data;
 	}
 
 	void add_convolutional_layer(const array<Index, 2> &kernel_dims, Index filters, Index stride) {
-		ConvolutionalLayer *layer = new ConvolutionalLayer(&data_buffer, &gradient_buffer, kernel_dims, filters, stride);
-		layers.push_back(layer);
+		layers.push_back(make_unique<ConvolutionalLayer>(&data_buffer, &gradient_buffer, kernel_dims, filters, stride));
 		number_of_layers++;
 	}
 
 	void add_maxpooling_layer(const array<Index, 2> &kernel_dims, Index stride) {
-		MaxPoolingLayer *layer = new MaxPoolingLayer(&data_buffer, &gradient_buffer, kernel_dims, stride);
-		layers.push_back(layer);
+		layers.push_back(make_unique<MaxPoolingLayer>(&data_buffer, &gradient_buffer, kernel_dims, stride));
 		number_of_layers++;
 	}
 
 	void add_fully_connected_layer(Index output_dim) {
-		FullyConnectedLayer *layer = new FullyConnectedLayer(&data_buffer, &gradient_buffer, output_dim);
-		layers.push_back(layer);
+		layers.push_back(make_unique<FullyConnectedLayer>(&data_buffer, &gradient_buffer, output_dim));
 		number_of_layers++;
 	}
 
 	void add_relu_layer() {
-		ReLULayer *layer = new ReLULayer(&data_buffer, &gradient_buffer);
-		layers.push_back(layer);
+		layers.push_back(make_unique<ReLULayer>(&data_buffer, &gradient_buffer));
 		number_of_layers++;
 	}
-
-	void add_softmax_layer() {
-		SoftMaxLayer *layer = new SoftMaxLayer(&data_buffer, &gradient_buffer);
-
-		this->number_of_predictions = layer->input_size;
-		this->predictions.resize(number_of_predictions);
-
-		layers.push_back(layer);
-		number_of_layers++;
-	}
-
 	void add_reshape_layer(const array<Index, 3> &output_dims) {
-		ReshapeLayer *layer = new ReshapeLayer(&data_buffer, &gradient_buffer, output_dims);
-		layers.push_back(layer);
+		layers.push_back(make_unique<ReshapeLayer>(&data_buffer, &gradient_buffer, output_dims));
 		number_of_layers++;
 	}
 
 	void add_flatten_layer() {
 		array<Index, 3> input_sizes = data_buffer.back()->dimensions();
 		add_reshape_layer(array<Index, 3>{1, 1, input_sizes[0] * input_sizes[1] * input_sizes[2]});
+	}
+
+	void add_softmax_layer() {
+		unique_ptr<SoftMaxLayer> layer = make_unique<SoftMaxLayer>(&data_buffer, &gradient_buffer);
+
+		this->number_of_predictions = layer->layer_size;
+		this->predictions.resize(number_of_predictions);
+
+		layers.push_back(std::move(layer));
+		number_of_layers++;
 	}
 
 	float get_mean_squared_error(int correct_prediction) {
@@ -761,12 +725,14 @@ class CNN {
 		return mean_squared_error;
 	}
 
+	float get_cross_entropy_loss(int correct_prediction) { return -std::log(predictions[correct_prediction] + 1e-12f); }
+
 	void forward() {
 		for (int i = 0; i < number_of_layers; i++) {
 			layers[i]->forward();
 		}
 
-		if (dynamic_cast<SoftMaxLayer *>(layers.back()) != nullptr) {
+		if (dynamic_cast<SoftMaxLayer *>(layers.back().get()) != nullptr) {
 			for (int i = 0; i < number_of_predictions; i++) {
 				predictions[i] = (*data_buffer.back())(0, 0, i);
 			}
@@ -774,14 +740,18 @@ class CNN {
 	}
 
 	void backward(int correct_prediction) {
-		if (dynamic_cast<SoftMaxLayer *>(layers.back()) != nullptr) {
+		if (dynamic_cast<SoftMaxLayer *>(layers.back().get()) != nullptr) {
 			// We shall create gradient for softmax first
+			// for (int i = 0; i < number_of_predictions; i++) {
+			// 	if (i == correct_prediction) {
+			// 		(*gradient_buffer[number_of_layers])(0, 0, i) = (predictions[i] - 1) * 2 / number_of_predictions;
+			// 	} else {
+			// 		(*gradient_buffer[number_of_layers])(0, 0, i) = (predictions[i]) * 2 / number_of_predictions;
+			// 	}
+			// }
 			for (int i = 0; i < number_of_predictions; i++) {
-				if (i == correct_prediction) {
-					(*gradient_buffer[number_of_layers])(0, 0, i) = (predictions[i] - 1) * 2 / number_of_predictions;
-				} else {
-					(*gradient_buffer[number_of_layers])(0, 0, i) = (predictions[i]) * 2 / number_of_predictions;
-				}
+				// no extra factor of 2, no division by number_of_predictions
+				(*gradient_buffer[number_of_layers])(0, 0, i) = predictions[i] - (i == correct_prediction ? 1.0f : 0.0f);
 			}
 		}
 
@@ -807,13 +777,6 @@ class CNN {
 
 		for (int i = number_of_layers - 1; i >= 0; i--) {
 			layers[i]->backward(learning_rate);
-		}
-	}
-
-	void print_buffers() {
-		for (auto it = data_buffer.begin(); it != data_buffer.end(); it++) {
-			cout << (*it) << endl;
-			cout << "bruh" << endl;
 		}
 	}
 };

@@ -60,23 +60,23 @@ pair<string, bool> test_conv_forward_filters() {
 	const string name = "Convolutional Forward Value (filters)";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 3, 3);
+	Tensor<float, 3> input(1, 3, 3);
 
 	float val = 0;
 	for (Index i = 0; i < 1; ++i)
 		for (Index j = 0; j < 3; ++j)
 			for (Index k = 0; k < 3; ++k)
-				(*input)(i, j, k) = val++;
+				input(i, j, k) = val++;
 
 	cout << "Input:" << endl;
-	// cout << (*input) << endl << endl;
-	PrintTensorNumpy(*input, 1, 3, 3);
+	// cout << (input) << endl << endl;
+	PrintTensorNumpy(input, 1, 3, 3);
 
 	CNN net(input, 0.1);
 
 	net.add_convolutional_layer(array<Index, 2>{2, 2}, 2, 1);
 
-	auto layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0]);
+	auto layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0].get());
 
 	cout << endl << "Kernel:" << endl;
 	for (Index f = 0; f < layer_ptr->filters; ++f) {
@@ -134,23 +134,23 @@ pair<string, bool> test_conv_forward_channels() {
 	const string name = "Convolutional Forward Value (channels)";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(2, 3, 3);
+	Tensor<float, 3> input(2, 3, 3);
 
 	float val = 0;
 	for (Index i = 0; i < 2; ++i)
 		for (Index j = 0; j < 3; ++j)
 			for (Index k = 0; k < 3; ++k)
-				(*input)(i, j, k) = val++;
+				(input)(i, j, k) = val++;
 
 	cout << "Input:" << endl;
-	// cout << (*input) << endl << endl;
-	PrintTensorNumpy(*input, 2, 3, 3);
+	// cout << (input) << endl << endl;
+	PrintTensorNumpy(input, 2, 3, 3);
 
 	CNN net(input, 0.1);
 
 	net.add_convolutional_layer(array<Index, 2>{2, 2}, 1, 1);
 
-	auto layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0]);
+	auto layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0].get());
 
 	cout << endl << "Kernel:" << endl;
 	for (Index f = 0; f < layer_ptr->filters; ++f) {
@@ -204,22 +204,22 @@ pair<string, bool> test_conv_forward_stride() {
 	const string name = "Convolutional Forward Value (stride)";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 4, 4);
+	Tensor<float, 3> input(1, 4, 4);
 
 	float val = 0;
 	for (Index c = 0; c < 1; ++c)
 		for (Index i = 0; i < 4; ++i)
 			for (Index j = 0; j < 4; ++j)
-				(*input)(c, i, j) = val++;
+				(input)(c, i, j) = val++;
 
 	cout << "Input:" << endl;
-	PrintTensorNumpy(*input, 1, 4, 4);
+	PrintTensorNumpy(input, 1, 4, 4);
 
 	CNN net(input, 0.1);
 
 	net.add_convolutional_layer(array<Index, 2>{2, 2}, 1, 2);
 
-	auto layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0]);
+	auto layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0].get());
 
 	cout << endl << "Kernel:" << endl;
 	for (Index f = 0; f < layer_ptr->filters; ++f) {
@@ -269,13 +269,13 @@ pair<string, bool> test_conv_forward_speed() {
 	const string name = "Convolutional Forward Speed";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(3, 256, 256);
+	Tensor<float, 3> input(3, 256, 256);
 
 	int val = 1;
 	for (Index i = 0; i < 3; ++i)
 		for (Index j = 0; j < 256; ++j)
 			for (Index k = 0; k < 256; ++k)
-				(*input)(i, j, k) = static_cast<float>((val++) % 16) / 16;
+				(input)(i, j, k) = static_cast<float>((val++) % 16) / 16;
 
 	CNN net(input, 0.1);
 
@@ -289,20 +289,21 @@ pair<string, bool> test_fully_connected_forward_value() {
 	const string name = "Fully Connected Forward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 4);
+	Tensor<float, 3> input(1, 1, 4);
 	for (int i = 0; i < 4; ++i) {
-		(*input)(0, 0, i) = i + 1;
+		(input)(0, 0, i) = i + 1;
 	}
 
 	cout << "Input:\n";
-	cout << *input << endl;
+	cout << input << endl;
 
 	CNN net(input, 0.1);
 	net.add_fully_connected_layer(3);
 
-	auto layer_ptr = dynamic_cast<FullyConnectedLayer *>(net.layers[0]);
+	auto layer_ptr = dynamic_cast<FullyConnectedLayer *>(net.layers[0].get());
 
 	layer_ptr->weights << 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12;
+	layer_ptr->biases << 0.1, 0.2, 0.3;
 
 	cout << "\nWeights:\n";
 	cout << layer_ptr->weights << endl;
@@ -310,9 +311,9 @@ pair<string, bool> test_fully_connected_forward_value() {
 	net.forward();
 
 	Tensor<float, 3> output_correct(1, 1, 3);
-	output_correct(0, 0, 0) = 30;
-	output_correct(0, 0, 1) = 70;
-	output_correct(0, 0, 2) = 110;
+	output_correct(0, 0, 0) = 30.1;
+	output_correct(0, 0, 1) = 70.2;
+	output_correct(0, 0, 2) = 110.3;
 
 	Tensor<float, 3> &output_computed = *net.data_buffer.back();
 
@@ -332,9 +333,9 @@ pair<string, bool> test_fully_connected_forward_speed() {
 	const string name = "Fully Connected Forward Speed";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 1024);
+	Tensor<float, 3> input(1, 1, 1024);
 	for (int i = 0; i < 4; ++i) {
-		(*input)(0, 0, i) = i + 1;
+		(input)(0, 0, i) = i + 1;
 	}
 
 	CNN net(input, 0.1);
@@ -349,15 +350,15 @@ pair<string, bool> test_maxpool_forward_value() {
 	const string name = "Max Pooling Forward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 4, 4);
+	Tensor<float, 3> input(1, 4, 4);
 
 	float val = 1;
 	for (int i = 0; i < 4; ++i)
 		for (int j = 0; j < 4; ++j)
-			(*input)(0, i, j) = val++;
+			(input)(0, i, j) = val++;
 
 	cout << "\nInput:\n";
-	cout << (*input) << endl;
+	cout << (input) << endl;
 
 	CNN net(input, 0.1);
 
@@ -388,12 +389,12 @@ pair<string, bool> test_maxpool_forward_speed() {
 	const string name = "Max Pooling Forward Speed";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(3, 256, 256);
+	Tensor<float, 3> input(3, 256, 256);
 
 	for (int c = 0; c < 3; ++c)
 		for (int i = 0; i < 256; ++i)
 			for (int j = 0; j < 256; ++j)
-				(*input)(c, i, j) = rand() % 100;
+				(input)(c, i, j) = rand() % 100;
 
 	CNN net(input, 0.1);
 
@@ -408,16 +409,16 @@ pair<string, bool> test_relu_forward_value() {
 	const string name = "Test ReLU Forward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+	Tensor<float, 3> input(2, 2, 2);
 
 	float val = 1;
 	for (int i = 0; i < 2; ++i)
 		for (int j = 0; j < 2; ++j)
 			for (int k = 0; k < 2; ++k)
-				(*input)(i, j, k) = -4 + val++;
+				(input)(i, j, k) = -4 + val++;
 
 	cout << "\nInput:\n";
-	cout << (*input) << endl;
+	cout << (input) << endl;
 
 	CNN net(input, 0.1);
 
@@ -453,13 +454,13 @@ pair<string, bool> test_softmax_forward_value() {
 	const string name = "Test SoftMax Forward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 4);
+	Tensor<float, 3> input(1, 1, 4);
 	for (int i = 0; i < 4; ++i) {
-		(*input)(0, 0, i) = i + 1;
+		(input)(0, 0, i) = i + 1;
 	}
 
 	cout << "Input:\n";
-	cout << *input << endl;
+	cout << input << endl;
 
 	CNN net(input, 0.1);
 	net.add_softmax_layer();
@@ -490,16 +491,16 @@ pair<string, bool> test_reshape_forward_value() {
 	const string name = "Reshape Forward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+	Tensor<float, 3> input(2, 2, 2);
 
 	float val = 1;
 	for (int i = 0; i < 2; ++i)
 		for (int j = 0; j < 2; ++j)
 			for (int k = 0; k < 2; ++k)
-				(*input)(i, j, k) = val++;
+				(input)(i, j, k) = val++;
 
 	cout << "Input:" << endl;
-	cout << (*input) << endl;
+	cout << (input) << endl;
 
 	CNN net(input, 0.1);
 	net.add_flatten_layer();
@@ -529,13 +530,13 @@ pair<string, bool> test_cnn_forward() {
 	const string name = "Test CNN Forward";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(3, 256, 256);
+	Tensor<float, 3> input(3, 256, 256);
 
 	int val = 1;
 	for (Index i = 0; i < 3; ++i)
 		for (Index j = 0; j < 256; ++j)
 			for (Index k = 0; k < 256; ++k)
-				(*input)(i, j, k) = static_cast<float>((val++) % 16) / 16;
+				(input)(i, j, k) = static_cast<float>((val++) % 16) / 16;
 
 	CNN net(input, 0.1);
 
@@ -612,14 +613,14 @@ pair<string, bool> test_loss_to_softmax_gradient() {
 	const string name = "Loss Gradient";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 4);
-	(*input)(0, 0, 0) = 0;
-	(*input)(0, 0, 1) = -2;
-	(*input)(0, 0, 2) = 3;
-	(*input)(0, 0, 3) = 2;
+	Tensor<float, 3> input(1, 1, 4);
+	(input)(0, 0, 0) = 0;
+	(input)(0, 0, 1) = -2;
+	(input)(0, 0, 2) = 3;
+	(input)(0, 0, 3) = 2;
 
 	cout << "Input:\n";
-	PrintTensorNumpy(*input, 1, 1, 4);
+	PrintTensorNumpy(input, 1, 1, 4);
 
 	CNN net(input, 0.1);
 	net.add_softmax_layer();
@@ -659,13 +660,13 @@ pair<string, bool> test_softmax_gradient() {
 	const string name = "SoftMax Gradient";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 4);
+	Tensor<float, 3> input(1, 1, 4);
 	for (int i = 0; i < 4; ++i) {
-		(*input)(0, 0, i) = i - 2;
+		(input)(0, 0, i) = i - 2;
 	}
 
 	cout << "Input:\n";
-	PrintTensorNumpy(*input, 1, 1, 4);
+	PrintTensorNumpy(input, 1, 1, 4);
 
 	CNN net(input, 0.1);
 	net.add_softmax_layer();
@@ -711,16 +712,16 @@ pair<string, bool> test_reshape_gradient() {
 	const string name = "Reshape Gradient";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+	Tensor<float, 3> input(2, 2, 2);
 
 	float val = 2.0f;
 	for (int i = 0; i < 2; ++i)
 		for (int j = 0; j < 2; ++j)
 			for (int k = 0; k < 2; ++k)
-				(*input)(i, j, k) = val++;
+				(input)(i, j, k) = val++;
 
 	cout << "Input:" << endl;
-	PrintTensorNumpy(*input, 2, 2, 2);
+	PrintTensorNumpy(input, 2, 2, 2);
 
 	CNN net(input, 0.1);
 	net.add_flatten_layer();
@@ -776,16 +777,16 @@ pair<string, bool> test_relu_gradient() {
 	const string name = "ReLU Gradient";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+	Tensor<float, 3> input(2, 2, 2);
 
 	float val = -3.0f;
 	for (int i = 0; i < 2; ++i)
 		for (int j = 0; j < 2; ++j)
 			for (int k = 0; k < 2; ++k)
-				(*input)(i, j, k) = val++;
+				(input)(i, j, k) = val++;
 
 	cout << "Input:" << endl;
-	PrintTensorNumpy(*input, 2, 2, 2);
+	PrintTensorNumpy(input, 2, 2, 2);
 
 	CNN net(input, 0.1);
 	net.add_relu_layer();
@@ -842,15 +843,15 @@ pair<string, bool> test_maxpool_gradient() {
 	const string name = "MaxPooling Gradient";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 4, 4);
+	Tensor<float, 3> input(1, 4, 4);
 	array<float, 16> values = {1, 3, 2, 1, 4, 4, 1, 0, 3, 5, 2, 1, 1, 2, 0, 6};
 
 	for (Index i = 0; i < 16; i++) {
-		(*input)(0, i / 4, i % 4) = values[i];
+		(input)(0, i / 4, i % 4) = values[i];
 	}
 
 	cout << "Input:" << endl;
-	PrintTensorNumpy(*input, 1, 4, 4);
+	PrintTensorNumpy(input, 1, 4, 4);
 
 	CNN net(input, 0.1);
 	net.add_maxpooling_layer({2, 2}, 2);
@@ -907,21 +908,21 @@ pair<string, bool> test_fully_connected_training() {
 	const string name = "Fully Connected Backward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 1, 4);
+	Tensor<float, 3> input(1, 1, 4);
 	for (int i = 0; i < 4; ++i) {
-		(*input)(0, 0, i) = i + 1;
+		(input)(0, 0, i) = i + 1;
 	}
 
 	cout << "Input:\n";
-	PrintTensorNumpy(*input, 1, 1, 4);
+	PrintTensorNumpy(input, 1, 1, 4);
 
 	float learning_rate = 10;
 	CNN net(input, learning_rate);
 	net.add_fully_connected_layer(3);
 	net.add_softmax_layer();
 
-	auto full_layer_ptr = dynamic_cast<FullyConnectedLayer *>(net.layers[0]);
-	auto softmax_layer_ptr = dynamic_cast<SoftMaxLayer *>(net.layers[1]);
+	auto full_layer_ptr = dynamic_cast<FullyConnectedLayer *>(net.layers[0].get());
+	auto softmax_layer_ptr = dynamic_cast<SoftMaxLayer *>(net.layers[1].get());
 
 	full_layer_ptr->weights << 5, 12, 15, 9, 5, 6, 7, 8, 9, 10, 11, 12;
 	full_layer_ptr->biases << 0.3, 0.2, 0.2;
@@ -1013,23 +1014,23 @@ pair<string, bool> test_conv_gradient() {
 	const string name = "Convolutional Backward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+	Tensor<float, 3> input(2, 2, 2);
 	for (Index c = 0; c < 2; ++c) {
 		for (Index i = 0; i < 2; ++i) {
 			for (Index j = 0; j < 2; ++j) {
-				(*input)(c, i, j) = c * 4 + i * 2 + j;
+				(input)(c, i, j) = c * 4 + i * 2 + j;
 			}
 		}
 	}
 
 	cout << "Input:\n";
-	PrintTensorNumpy(*input, 2, 2, 2);
+	PrintTensorNumpy(input, 2, 2, 2);
 
 	float learning_rate = 0.1;
 	CNN net(input, learning_rate);
 	net.add_convolutional_layer({2, 2}, 2, 1);
 
-	ConvolutionalLayer *conv_layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0]);
+	ConvolutionalLayer *conv_layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0].get());
 
 	conv_layer_ptr->kernel << 0.0f, 0.1f, 0.0f, 0.1f, 0.0f, 0.3f, 0.2f, 0.3f, 0.1f, 0.1f, 0.4f, 0.2f, 0.1f, 0.3f, 0.4f, 0.1f;
 	conv_layer_ptr->biases << 0.3, 0.2;
@@ -1131,21 +1132,21 @@ pair<string, bool> test_conv_input_grad_simple() {
 	const string name = "Convolutional Backward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(1, 2, 2);
+	Tensor<float, 3> input(1, 2, 2);
 	for (Index i = 0; i < 2; ++i) {
 		for (Index j = 0; j < 2; ++j) {
-			(*input)(0, i, j) = i * 2 + j;
+			(input)(0, i, j) = i * 2 + j;
 		}
 	}
 
 	cout << "Input:\n";
-	PrintTensorNumpy(*input, 1, 2, 2);
+	PrintTensorNumpy(input, 1, 2, 2);
 
 	float learning_rate = 10;
 	CNN net(input, learning_rate);
 	net.add_convolutional_layer({2, 2}, 1, 1);
 
-	ConvolutionalLayer *conv_layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0]);
+	ConvolutionalLayer *conv_layer_ptr = dynamic_cast<ConvolutionalLayer *>(net.layers[0].get());
 
 	conv_layer_ptr->kernel << 1, 3, 2, 1;
 	conv_layer_ptr->biases << 0.3;
@@ -1210,16 +1211,16 @@ pair<string, bool> test_reshape_back() {
 	const string name = "Reshape Backward Value";
 	cout << "\033[1;33m===== Test " + name + " =====\033[0m\n";
 
-	Tensor<float, 3> *input = new Tensor<float, 3>(2, 2, 2);
+	Tensor<float, 3> input(2, 2, 2);
 
 	float val = 1;
 	for (int i = 0; i < 2; ++i)
 		for (int j = 0; j < 2; ++j)
 			for (int k = 0; k < 2; ++k)
-				(*input)(i, j, k) = val++;
+				(input)(i, j, k) = val++;
 
 	cout << "Input:" << endl;
-	cout << (*input) << endl;
+	cout << (input) << endl;
 
 	CNN net(input, 0.1);
 	net.add_flatten_layer();
@@ -1242,35 +1243,36 @@ pair<string, bool> test_reshape_back() {
 	for (int i = 0; i < 2; ++i)
 		for (int j = 0; j < 2; ++j)
 			for (int k = 0; k < 2; ++k)
-				if ((*input)(i, j, k) != (*net.gradient_buffer[0])(i, j, k))
+				if ((input)(i, j, k) != (*net.gradient_buffer[0])(i, j, k))
 					return {name, false};
 
 	return {name, true};
 }
 
 int main() {
-	// test_func(test_conv_forward_filters);
-	// test_func(test_conv_forward_channels);
-	// // test_func(test_conv_forward_stride);
-	// // test_func(test_conv_forward_speed);
-	//
-	// test_func(test_fully_connected_forward_value);
-	// test_func(test_fully_connected_forward_speed);
-	//
-	// test_func(test_maxpool_forward_value);
-	// test_func(test_maxpool_forward_speed);
-	//
-	// test_func(test_relu_forward_value);
-	// test_func(test_softmax_forward_value);
 
-	// test_func(test_loss_to_softmax_gradient);
-	// test_func(test_softmax_gradient);
-	// test_func(test_reshape_gradient);
-	// test_func(test_relu_gradient);
-	// test_func(test_maxpool_gradient);
-	// test_func(test_fully_connected_training);
-	// test_func(test_conv_input_grad_simple);
-	// test_func(test_conv_gradient);
+	test_func(test_conv_forward_filters);
+	test_func(test_conv_forward_channels);
+	test_func(test_conv_forward_stride);
+	// test_func(test_conv_forward_speed);
+
+	test_func(test_fully_connected_forward_value);
+	test_func(test_fully_connected_forward_speed);
+
+	test_func(test_maxpool_forward_value);
+	test_func(test_maxpool_forward_speed);
+
+	test_func(test_relu_forward_value);
+	test_func(test_softmax_forward_value);
+
+	test_func(test_loss_to_softmax_gradient);
+	test_func(test_softmax_gradient);
+	test_func(test_reshape_gradient);
+	test_func(test_relu_gradient);
+	test_func(test_maxpool_gradient);
+	test_func(test_fully_connected_training);
+	test_func(test_conv_input_grad_simple);
+	test_func(test_conv_gradient);
 
 	// test_func(test_cnn_forward);
 	test_func(test_reshape_forward_value);
