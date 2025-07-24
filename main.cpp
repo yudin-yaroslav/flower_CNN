@@ -44,10 +44,10 @@ int main() {
 	const int number_of_labels = 5;
 	const int number_of_epochs = 5;
 
-	vector<Sample> training_data = load_dataset("../dataset_new/train", H, W, number_of_labels);
+	vector<Sample> training_data = load_dataset("../dataset/train", H, W, number_of_labels);
 	cout << "Loaded " << training_data.size() << " training samples.\n";
 
-	vector<Sample> testing_data = load_dataset("../dataset_new/test", H, W, number_of_labels);
+	vector<Sample> testing_data = load_dataset("../dataset/test", H, W, number_of_labels);
 	cout << "Loaded " << testing_data.size() << " testing samples.\n";
 
 	CNN net(training_data[0].image, 1e-2 * 2);
