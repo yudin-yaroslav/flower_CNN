@@ -1,23 +1,38 @@
 import os
+from pathlib import Path
 
 from PIL import Image
 
-# === CONFIGURATION ===
-src_folder = "dataset/test/oxeye_daisy"  # Folder with original 256x256 images
-dst_folder = "dataset_small/test/oxeyer_daisy"  # Folder for resized 32x32 images
-target_size = (32, 32)
+# Input and output directories
+input_dir = Path("dataset_new")
+output_dir = Path("dataset_new_resized")
 
-# === CREATE DESTINATION FOLDER IF MISSING ===
-os.makedirs(dst_folder, exist_ok=True)
+# Make sure output directory exists
+output_dir.mkdir(parents=True, exist_ok=True)
 
-# === RESIZE IMAGES ===
-for filename in os.listdir(src_folder):
-    src_path = os.path.join(src_folder, filename)
-    dst_path = os.path.join(dst_folder, filename)
+# Desired image size
+target_size = (64, 64)
 
-    try:
-        with Image.open(src_path) as img:
-            img = img.resize(target_size)
-            img.save(dst_path)
-    except Exception as e:
-        print(f"Skipping {filename}: {e}")
+
+def resize_and_pad(img: Image.Image, size=(128, 128)) -> Image.Image:
+    """Resize image with aspect ratio preserved and pad with black."""
+    img.thumbnail(size, Image.LANCZOS)  # Resize maintaining aspect ratio
+    new_img = Image.new("RGB", size, (0, 0, 0))  # Black canvas
+    offset = ((size[0] - img.width) // 2, (size[1] - img.height) // 2)
+    new_img.paste(img, offset)
+    return new_img
+
+
+for class_dir in input_dir.iterdir():
+    if not class_dir.is_dir():
+        continue
+    output_class_dir = output_dir / class_dir.name
+    output_class_dir.mkdir(parents=True, exist_ok=True)
+
+    for img_path in class_dir.glob("*.jpg"):
+        try:
+            img = Image.open(img_path).convert("RGB")
+            resized = resize_and_pad(img, target_size)
+            resized.save(output_class_dir / img_path.name)
+        except Exception as e:
+            print(f"Failed to process {img_path}: {e}")

@@ -11,7 +11,7 @@
 #define EIGEN_DONT_PARALLELIZE false
 
 using namespace Eigen;
-using std::cout, std::endl;
+using std::cout, std::endl, std::cerr;
 using std::unique_ptr, std::shared_ptr, std::make_unique, std::make_shared;
 using std::vector;
 
@@ -89,6 +89,10 @@ class ConvolutionalLayer : public Layer {
 		this->P = (H - R) / stride + 1;
 		this->Q = (W - S) / stride + 1;
 
+		if (P <= 0 || Q <= 0) {
+			cerr << "The ouput size is too small\n";
+		}
+
 		this->H_back = (stride - 1) * (P - 1) + P + (R - 1) * 2;
 		this->W_back = (stride - 1) * (Q - 1) + Q + (S - 1) * 2;
 		this->P_back = H_back - R + 1;
@@ -96,8 +100,16 @@ class ConvolutionalLayer : public Layer {
 
 		this->output_sizes = {K, P, Q};
 
-		kernel = MatrixXf::Random(K, R * S * C) / 1000.0f;
-		biases = MatrixXf::Zero(K, P * Q);
+		std::default_random_engine rng(std::random_device{}());
+		float fan_in = R * S * C;
+		float kaiming_bound = std::sqrt(6.0f / fan_in);
+
+		std::uniform_real_distribution<float> weight_dist(-kaiming_bound, kaiming_bound);
+		kernel = MatrixXf::NullaryExpr(K, R * S * C, [&]() { return weight_dist(rng); });
+
+		float bias_bound = 1.0f / std::sqrt(fan_in);
+		std::uniform_real_distribution<float> bias_dist(-bias_bound, bias_bound);
+		biases = MatrixXf::NullaryExpr(K, P * Q, [&]() { return bias_dist(rng); });
 
 		bias_gradients = MatrixXf::Zero(K, P * Q);
 		kernel_gradients = MatrixXf::Zero(K, R * S * C);
@@ -139,15 +151,18 @@ class ConvolutionalLayer : public Layer {
 		float *out_reshaped_ptr_in = output_grad_reshaped_in.data();
 
 		for (Index i = 0; i < (K * R * S) * (P_back * Q_back); ++i) {
-			if (out_grad_reshaped_for_input_indices[i] == K * R * S) {
+			if (out_grad_reshaped_for_input_indices[i] == K * P * Q) {
 				out_reshaped_ptr_in[i] = 0.0f;
 			} else {
+				// cout << i << ": " << out_grad_reshaped_for_input_indices[i] << " " << K * P * Q << endl;
+				// cout << output_gradients->dimensions()[0] << " " << output_gradients->dimensions()[1] << " "
+				// 	 << output_gradients->dimensions()[2] << endl;
 				out_reshaped_ptr_in[i] = out_ptr_in[out_grad_reshaped_for_input_indices[i]];
 			}
 		}
 
 		// cout << "\nOutput gradient reshaped for input: " << endl;
-		// PrintMatrixNumpy(output_grad_reshaped_in, R * S * K, P_pad * Q_pad);
+		// PrintMatrixNumpy(output_grad_reshaped_in, R * S * K, P_back * Q_back);
 
 		MatrixXf input_gradient_mat = kernel_reshaped * output_grad_reshaped_in;
 		// PrintMatrixNumpy(input_gradient_mat, C, H * W);
@@ -329,6 +344,10 @@ class MaxPoolingLayer : public Layer {
 		this->output_sizes = {input_sizes[0], (input_sizes[1] - kernel_sizes[0]) / stride + 1,
 							  (input_sizes[2] - kernel_sizes[1]) / stride + 1};
 
+		if (output_sizes[1] <= 0 || output_sizes[2] <= 0) {
+			cerr << "The ouput size is too small\n";
+		}
+
 		attach_network(buffers_ptr, gradients_ptr);
 	}
 
@@ -401,17 +420,20 @@ class FullyConnectedLayer : public Layer {
 	Index input_size;
 	Index output_size;
 
-	float scale;
+	std::default_random_engine rng;
+	std::uniform_real_distribution<float> uniform;
 
 	FullyConnectedLayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr,
 						Index output_dim) {
 		this->input_size = buffers_ptr->back()->dimensions()[2];
 		this->output_size = output_dim;
 
-		scale = std::sqrt(2.0f / (input_size + output_size));
+		float bound = std::sqrt(6.0f / input_size);
 
-		weights = MatrixXf::NullaryExpr(output_size, input_size, [&]() { return (2.0f * rand() / RAND_MAX - 1.0f) * scale; });
-		biases = VectorXf::Zero(output_dim);
+		uniform = std::uniform_real_distribution<float>(-bound, bound);
+
+		weights = MatrixXf::NullaryExpr(output_size, input_size, [&]() { return uniform(rng); });
+		biases = VectorXf::NullaryExpr(output_size, [&]() { return uniform(rng); });
 
 		weight_gradients = MatrixXf::Zero(output_size, input_size);
 		bias_gradients = VectorXf::Zero(output_size);
@@ -517,6 +539,33 @@ class ReLULayer : public Layer {
 	}
 };
 
+class LeakyReLULayer : public Layer {
+  public:
+	array<Index, 3> input_sizes;
+	const float negative_slope = 0.01f;
+
+	LeakyReLULayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr) {
+		this->input_sizes = buffers_ptr->back()->dimensions();
+		attach_network(buffers_ptr, gradients_ptr);
+	}
+
+	void forward() override {
+		(*output_data) = (*input_data).unaryExpr([this](float x) { return x > 0 ? x : negative_slope * x; });
+	}
+
+	void backward(float learning_rate) override {
+		for (Index i = 0; i < input_sizes[0]; ++i) {
+			for (Index j = 0; j < input_sizes[1]; ++j) {
+				for (Index k = 0; k < input_sizes[2]; ++k) {
+					float x = (*input_data)(i, j, k);
+					float grad = (*output_gradients)(i, j, k);
+					(*input_gradients)(i, j, k) = (x > 0) ? grad : negative_slope * grad;
+				}
+			}
+		}
+	}
+};
+
 class SoftMaxLayer : public Layer {
   public:
 	Index layer_size;
@@ -525,9 +574,8 @@ class SoftMaxLayer : public Layer {
 		const array<Index, 3> dims = buffers_ptr->back()->dimensions();
 
 		if (buffers_ptr->back()->dimensions()[0] != 1 || buffers_ptr->back()->dimensions()[1] != 1) {
-			throw std::invalid_argument(
-				"SoftMax works EXCLUSIVELY after fully-connected layers, but the shape of input layer is (" +
-				std::to_string(dims[0]) + ", " + std::to_string(dims[1]) + ", " + std::to_string(dims[2]) + ")");
+			cerr << "SoftMax works EXCLUSIVELY after fully-connected layers, but the shape of input layer is (" +
+						std::to_string(dims[0]) + ", " + std::to_string(dims[1]) + ", " + std::to_string(dims[2]) + ")\n";
 		}
 		this->layer_size = dims[2];
 
@@ -577,7 +625,7 @@ class ReshapeLayer : public Layer {
 		this->length = input_sizes[0] * input_sizes[1] * input_sizes[2];
 
 		if (length != output_sizes[0] * output_sizes[1] * output_sizes[2]) {
-			throw std::invalid_argument("Input and output don't have the same number of elements");
+			cerr << "Input and output don't have the same number of elements" << endl;
 		}
 
 		attach_network(buffers_ptr, gradients_ptr);
@@ -629,7 +677,54 @@ class ReshapeLayer : public Layer {
 				}
 			}
 		}
-	};
+	}
+};
+
+class DropoutLayer : public Layer {
+  public:
+	Tensor<float, 1> channel_mask;
+
+	array<Index, 3> input_sizes;
+	float dropout_rate = 0.3f;
+
+	std::default_random_engine rng;
+	std::bernoulli_distribution bernoulli;
+
+	DropoutLayer(vector<shared_ptr<Tensor<float, 3>>> *buffers_ptr, vector<shared_ptr<Tensor<float, 3>>> *gradients_ptr,
+				 float rate = 0.3f) {
+
+		this->dropout_rate = rate;
+		this->bernoulli = std::bernoulli_distribution(1.0 - rate);
+
+		this->input_sizes = (*buffers_ptr->back()).dimensions();
+		attach_network(buffers_ptr, gradients_ptr);
+
+		channel_mask = Tensor<float, 1>(input_sizes[2]);
+	}
+
+	void forward() override {
+		for (Index c = 0; c < input_sizes[2]; ++c) {
+			channel_mask(c) = bernoulli(rng) ? 1.0f / (1.0f - dropout_rate) : 0.0f;
+		}
+
+		for (Index i = 0; i < input_sizes[0]; ++i) {
+			for (Index j = 0; j < input_sizes[1]; ++j) {
+				for (Index c = 0; c < input_sizes[2]; ++c) {
+					(*output_data)(i, j, c) = (*input_data)(i, j, c) * channel_mask(c);
+				}
+			}
+		}
+	}
+
+	void backward(float learning_rate) override {
+		for (Index i = 0; i < input_sizes[0]; ++i) {
+			for (Index j = 0; j < input_sizes[1]; ++j) {
+				for (Index c = 0; c < input_sizes[2]; ++c) {
+					(*input_gradients)(i, j, c) = (*output_gradients)(i, j, c) * channel_mask(c);
+				}
+			}
+		}
+	}
 };
 
 class CNN {
@@ -689,6 +784,12 @@ class CNN {
 		layers.push_back(make_unique<ReLULayer>(&data_buffer, &gradient_buffer));
 		number_of_layers++;
 	}
+
+	void add_leaky_relu_layer() {
+		layers.push_back(make_unique<LeakyReLULayer>(&data_buffer, &gradient_buffer));
+		number_of_layers++;
+	}
+
 	void add_reshape_layer(const array<Index, 3> &output_dims) {
 		layers.push_back(make_unique<ReshapeLayer>(&data_buffer, &gradient_buffer, output_dims));
 		number_of_layers++;
@@ -706,6 +807,11 @@ class CNN {
 		this->predictions.resize(number_of_predictions);
 
 		layers.push_back(std::move(layer));
+		number_of_layers++;
+	}
+
+	void add_dropout_layer(float dropout_rate) {
+		layers.push_back(make_unique<DropoutLayer>(&data_buffer, &gradient_buffer, dropout_rate));
 		number_of_layers++;
 	}
 

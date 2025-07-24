@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <iostream>
 #include <map>
 #include <opencv2/opencv.hpp>
 #include <random>
@@ -18,7 +19,7 @@ struct Sample {
 Tensor<float, 3> load_image(const std::string &path, int H, int W) {
 	Mat img = imread(path, IMREAD_COLOR);
 	if (img.empty()) {
-		throw std::runtime_error("Failed to load " + path);
+		std::cerr << "Failed to load " << path << std::endl;
 	}
 	cvtColor(img, img, COLOR_BGR2RGB);
 	resize(img, img, Size(W, H));

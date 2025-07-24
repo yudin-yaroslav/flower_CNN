@@ -1,12 +1,5 @@
 #include "layers.hpp"
 
-float get_MSE(Sample *sample, CNN &net) {
-	net.set_input_data(sample->image);
-	net.forward();
-
-	return net.get_mean_squared_error(sample->label);
-}
-
 bool get_correct(Sample *sample, CNN &net) {
 	cout << "Testing sample with label " << sample->label << endl;
 	net.set_input_data(sample->image);
@@ -47,38 +40,30 @@ void train_CNN(vector<Sample> *training_data, CNN &net) {
 }
 
 int main() {
-	const int C = 3, H = 256, W = 256;
-	const int number_of_labels = 4;
-	const int number_of_epochs = 10;
+	const int C = 3, H = 64, W = 64;
+	const int number_of_labels = 5;
+	const int number_of_epochs = 5;
 
-	vector<Sample> training_data = load_dataset("../dataset/train", H, W, number_of_labels);
+	vector<Sample> training_data = load_dataset("../dataset_new/train", H, W, number_of_labels);
 	cout << "Loaded " << training_data.size() << " training samples.\n";
 
-	vector<Sample> testing_data = load_dataset("../dataset/test", H, W, number_of_labels);
+	vector<Sample> testing_data = load_dataset("../dataset_new/test", H, W, number_of_labels);
 	cout << "Loaded " << testing_data.size() << " testing samples.\n";
 
-	CNN net(training_data[0].image, 0.01);
+	CNN net(training_data[0].image, 1e-2 * 2);
 
-	net.add_convolutional_layer({4, 4}, 16, 4);
-	net.add_relu_layer();
+	net.add_convolutional_layer({4, 4}, 32, 4); // 64x64 → 16x16
+	net.add_leaky_relu_layer();
 
-	net.add_convolutional_layer({4, 4}, 32, 2);
-	net.add_relu_layer();
+	net.add_convolutional_layer({2, 2}, 64, 2); // 16x16 → 8x8
+	net.add_leaky_relu_layer();
 
-	net.add_maxpooling_layer({2, 2}, 2);
-
-	net.add_convolutional_layer({3, 3}, 64, 1);
-	net.add_relu_layer();
-
-	net.add_maxpooling_layer({2, 2}, 2);
-
-	net.add_convolutional_layer({3, 3}, 128, 1);
-	net.add_relu_layer();
-
-	net.add_maxpooling_layer({2, 2}, 2);
+	net.add_convolutional_layer({2, 2}, 128, 2); // 8x8 → 4x4
+	net.add_leaky_relu_layer();
 
 	net.add_flatten_layer();
-	net.add_fully_connected_layer(8100);
+	net.add_fully_connected_layer(256);
+	net.add_dropout_layer(0.5f);
 	net.add_fully_connected_layer(number_of_labels);
 	net.add_softmax_layer();
 
@@ -98,35 +83,35 @@ int main() {
 		accuracy_array[i] = correct / total;
 
 		cout << "ACCURACY = " << accuracy_array[i] << endl;
+
+		cout << "\n\033[1;34mPredictions of testing_data: \033[0m\n";
+		get_correct(&(testing_data[0]), net);
+		for (int i = 0; i < number_of_labels; i++) {
+			cout << net.predictions[i] << endl;
+		}
+		cout << endl;
+
+		get_correct(&(testing_data[1]), net);
+		for (int i = 0; i < number_of_labels; i++) {
+			cout << net.predictions[i] << endl;
+		}
+		cout << endl;
+
+		get_correct(&(testing_data[5]), net);
+		for (int i = 0; i < number_of_labels; i++) {
+			cout << net.predictions[i] << endl;
+		}
+		cout << endl;
+
+		get_correct(&(testing_data[7]), net);
+		for (int i = 0; i < number_of_labels; i++) {
+			cout << net.predictions[i] << endl;
+		}
+		cout << endl;
 	}
 
 	cout << "\n\033[1;34mTest results after training: \033[0m\n";
-	cout << "Accuracy = " << test_CNN(&testing_data, net) / number_of_labels / 5 << endl;
-
-	cout << "\n\033[1;34mPredictions of testing_data: \033[0m\n";
-	get_correct(&(testing_data[0]), net);
-	for (int i = 0; i < number_of_labels; i++) {
-		cout << net.predictions[i] << endl;
-	}
-	cout << endl;
-
-	get_correct(&(testing_data[1]), net);
-	for (int i = 0; i < number_of_labels; i++) {
-		cout << net.predictions[i] << endl;
-	}
-	cout << endl;
-
-	get_correct(&(testing_data[5]), net);
-	for (int i = 0; i < number_of_labels; i++) {
-		cout << net.predictions[i] << endl;
-	}
-	cout << endl;
-
-	get_correct(&(testing_data[7]), net);
-	for (int i = 0; i < number_of_labels; i++) {
-		cout << net.predictions[i] << endl;
-	}
-	cout << endl;
+	cout << "Accuracy = " << test_CNN(&testing_data, net) / testing_data.size() << endl;
 
 	cout << "\n\033[1;34mAccuracy array: \033[0m\n";
 	for (int i = 0; i < number_of_epochs; i++) {
